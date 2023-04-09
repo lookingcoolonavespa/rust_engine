@@ -1,8 +1,10 @@
+use core::fmt;
+
 use crate::bitboard::{BB, FILE_A, ROW_1};
 
 pub type Internal = usize;
 
-#[derive(PartialEq, PartialOrd, Copy, Clone)]
+#[derive(PartialEq, PartialOrd, Debug, Clone, Copy)]
 pub struct Square(pub Internal);
 
 impl Square {
@@ -14,15 +16,19 @@ impl Square {
         Square((rank * 8) + file)
     }
 
-    pub fn to_usize(self) -> usize {
+    pub fn to_usize(&self) -> usize {
         self.0
+    }
+
+    pub fn to_u8(&self) -> u8 {
+        self.0 as u8
     }
 
     pub fn change_rank(self, rank: Internal) -> Square {
         Square((self.0 & 7) | (rank * 8))
     }
 
-    pub fn file(self) -> usize {
+    pub fn file(&self) -> usize {
         self.0 & 7
     }
 
@@ -30,7 +36,7 @@ impl Square {
         FILE_A << (self.0 & 7)
     }
 
-    pub fn rank(self) -> usize {
+    pub fn rank(&self) -> usize {
         self.0 >> 3
     }
 
@@ -44,6 +50,44 @@ impl Square {
 
     pub fn anti_diagonal_mask(self) -> BB {
         ANTI_DIAGONALS[self.0]
+    }
+}
+
+impl fmt::Display for Square {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let file_char = FILES[self.file()];
+        let rank_char = RANKS[self.rank()];
+        let str = format!("{}{}", file_char, rank_char);
+        write!(f, "{}", str)
+    }
+}
+
+#[cfg(test)]
+pub mod test_display {
+    use super::*;
+
+    #[test]
+    pub fn a1() {
+        let fmt_str = A1.to_string();
+        let expected = "a1";
+
+        assert_eq!(fmt_str, expected);
+    }
+
+    #[test]
+    pub fn h8() {
+        let fmt_str = H8.to_string();
+        let expected = "h8";
+
+        assert_eq!(fmt_str, expected);
+    }
+
+    #[test]
+    pub fn c5() {
+        let fmt_str = C5.to_string();
+        let expected = "c5";
+
+        assert_eq!(fmt_str, expected);
     }
 }
 
@@ -111,6 +155,7 @@ pub const E8: Square = Square(60);
 pub const F8: Square = Square(61);
 pub const G8: Square = Square(62);
 pub const H8: Square = Square(63);
+pub const NULL: Square = Square(64);
 
 pub const FILES: [char; 8] = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
 pub const RANKS: [char; 8] = ['1', '2', '3', '4', '5', '6', '7', '8'];

@@ -1,6 +1,6 @@
 use crate::{bitboard::BB, mv::Move, square::Square};
 
-struct MoveList(Vec<Move>);
+pub struct MoveList(Vec<Move>);
 
 impl MoveList {
     pub fn new() -> MoveList {
@@ -11,9 +11,18 @@ impl MoveList {
         self.0.iter()
     }
 
-    pub fn insert_move<F: Fn(Square, Square) -> Move>(&mut self, from: Square, target: BB, f: F) {
-        for (to, _) in target.iter() {
-            self.0.push(f(from, to))
+    pub fn insert_moves<F: Fn(&Square, &Square) -> Move>(
+        &mut self,
+        from: &Square,
+        target: BB,
+        f: F,
+    ) {
+        for to in target.iter() {
+            self.0.push(f(from, &to))
         }
+    }
+
+    pub fn push_move(&mut self, mv: Move) {
+        self.0.push(mv)
     }
 }

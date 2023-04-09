@@ -1,7 +1,7 @@
 use subenum::subenum;
 
-#[derive(Copy, Clone)]
 #[subenum(PromoteType)]
+#[derive(Copy, Clone)]
 pub enum PieceType {
     Pawn = 0,
     #[subenum(PromoteType)]
@@ -15,6 +15,14 @@ pub enum PieceType {
     King = 5,
 }
 
+pub const PROMOTE_TYPE_ARR: [PromoteType; 4] = [
+    PromoteType::Knight,
+    PromoteType::Bishop,
+    PromoteType::Rook,
+    PromoteType::Queen,
+];
+const PIECE_CHARS: [char; 6] = ['p', 'n', 'b', 'r', 'q', 'k'];
+
 impl PieceType {
     pub fn to_u8(self) -> u8 {
         self as u8
@@ -22,6 +30,10 @@ impl PieceType {
 
     pub fn to_usize(self) -> usize {
         self as usize
+    }
+
+    pub fn to_char(self) -> char {
+        PIECE_CHARS[self.to_usize()]
     }
 }
 
@@ -55,12 +67,12 @@ impl TryFrom<char> for PieceType {
 
     fn try_from(v: char) -> Result<Self, Self::Error> {
         match v {
-            p => Ok(PieceType::Pawn),
-            n => Ok(PieceType::Knight),
-            b => Ok(PieceType::Bishop),
-            r => Ok(PieceType::Rook),
-            q => Ok(PieceType::Queen),
-            k => Ok(PieceType::King),
+            'p' => Ok(PieceType::Pawn),
+            'n' => Ok(PieceType::Knight),
+            'b' => Ok(PieceType::Bishop),
+            'r' => Ok(PieceType::Rook),
+            'q' => Ok(PieceType::Queen),
+            'k' => Ok(PieceType::King),
             _ => Err("not a valid piece"),
         }
     }

@@ -9,11 +9,11 @@ use std::{
 
 use crate::square::Square;
 
-#[derive(Debug, PartialEq, Copy, Clone)]
+#[derive(Debug, PartialEq, Clone, Copy)]
 pub struct BB(pub u64);
 
 impl BB {
-    pub fn new(sq: Square) -> BB {
+    pub fn new(sq: &Square) -> BB {
         BB(1u64 << sq.0)
     }
 
@@ -25,8 +25,16 @@ impl BB {
         crate::square::ALL[self.0.trailing_zeros() as usize]
     }
 
-    pub fn is_set(self, sq: Square) -> bool {
+    pub fn is_set(self, sq: &Square) -> bool {
         (self.0 >> sq.0) & 1 != 0
+    }
+
+    pub fn from_arr(sq_arr: &[Square]) -> BB {
+        let mut bb = EMPTY;
+        for sq in sq_arr {
+            bb |= BB::new(sq);
+        }
+        bb
     }
 
     pub fn reverse(self) -> BB {
@@ -162,7 +170,7 @@ impl fmt::Display for BB {
             f,
             "{}",
             grid_to_string(|sq: Square| -> char {
-                if self.is_set(sq) {
+                if self.is_set(&sq) {
                     '#'
                 } else {
                     '.'
@@ -175,11 +183,10 @@ impl fmt::Display for BB {
 pub struct BBIterator(BB);
 
 impl Iterator for BBIterator {
-    type Item = (Square, BB);
+    type Item = Square;
 
     // iterates a bitboard from low to high
-    // returns a tuple of (square, bitboard)
-    fn next(&mut self) -> Option<(Square, BB)> {
+    fn next(&mut self) -> Option<Square> {
         if (self.0).0 == EMPTY.0 {
             return None;
         }
@@ -187,7 +194,7 @@ impl Iterator for BBIterator {
         let sq = self.0.bitscan();
         let lsb = self.0.lsb();
         self.0 ^= lsb;
-        Some((sq, lsb))
+        Some(sq)
     }
 }
 

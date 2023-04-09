@@ -1,7 +1,6 @@
 use core::fmt;
-use std::collections::HashMap;
 
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub enum Side {
     White = 0,
     Black = 1,
@@ -20,12 +19,16 @@ impl Side {
         }
     }
 }
+impl fmt::Display for Side {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let str = if *self == WHITE {
+            "white".to_string()
+        } else {
+            "black".to_string()
+        };
+        write!(f, "{}", str)
+    }
+}
 
 pub const WHITE: Side = Side::White;
 pub const BLACK: Side = Side::Black;
-
-pub const SIDE_MAP: HashMap<&str, Side> = HashMap::from([("w", Side::White), ("b", Side::Black)]);
-
-impl fmt::Display for Side {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {}
-}

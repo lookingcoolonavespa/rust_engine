@@ -22,7 +22,7 @@ pub fn grid_to_string<F: Fn(Square) -> char>(char_at: F) -> String {
 pub fn get_bb_from_array_of_squares(sq_arr: &[Square]) -> BB {
     let mut bb = bitboard::EMPTY;
     for sq in sq_arr {
-        bb |= BB::new(sq.to_owned());
+        bb |= BB::new(sq);
     }
     bb
 }

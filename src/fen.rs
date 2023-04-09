@@ -1,14 +1,16 @@
+use std::collections::HashMap;
+
 use crate::{
     bitboard::{self, BB},
-    castle_rights::{self, CastleRights},
     piece_type::PieceType,
-    position::Position,
-    side::{BLACK, SIDE_MAP, WHITE},
+    side::{Side, BLACK, WHITE},
     square::{self, Square},
+    state::castle_rights::{self, CastleRights},
+    state::position::Position,
     state::State,
 };
 
-pub const STARTING_POSITION_FEN: &str = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w QqKk - 0 1";
+pub const STARTING_POSITION_FEN: &str = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 
 pub fn load_fen(fen: &str) -> Result<(Position, State), String> {
     let mut fen_state = fen.split(" ");
@@ -17,7 +19,8 @@ pub fn load_fen(fen: &str) -> Result<(Position, State), String> {
     let (bb_sides, bb_pieces) = parse_fen_board(fen_board)?;
 
     let fen_side_to_move = fen_state.next().ok_or("fen string is missing fields")?;
-    let side_to_move = SIDE_MAP
+    let side_map: HashMap<&str, Side> = HashMap::from([("w", Side::White), ("b", Side::Black)]);
+    let side_to_move = side_map
         .get(fen_side_to_move)
         .ok_or("side to move is an invalid color")?;
 
@@ -28,26 +31,21 @@ pub fn load_fen(fen: &str) -> Result<(Position, State), String> {
     let en_passant = parse_fen_en_passant(fen_en_passant)?;
 
     let fen_halfmoves = fen_state.next().ok_or("fen string is missing fields")?;
-    let halfmoves = fen_halfmoves
-        .chars()
-        .next()
-        .unwrap()
-        .to_digit(10)
-        .ok_or("halfmoves is not a number")?;
+    let halfmoves = match fen_halfmoves.parse::<u16>() {
+        Ok(num) => num,
+        Err(_) => return Err("halmoves is not a number".to_string()),
+    };
 
     let fen_fullmoves = fen_state.next().ok_or("fen string is missing fields")?;
-    let fullmoves = fen_fullmoves
-        .chars()
-        .next()
-        .unwrap()
-        .to_digit(10)
-        .ok_or("fullmoves is not a number")?;
-
+    let fullmoves = match fen_fullmoves.parse::<u16>() {
+        Ok(num) => num,
+        Err(_) => return Err("fullmoves is not a number".to_string()),
+    };
     Ok((
         Position::new(bb_sides, bb_pieces),
         State::new(
             en_passant,
-            side_to_move.to_owned(),
+            *side_to_move,
             castle_rights,
             halfmoves as u16,
             fullmoves as u16,
@@ -56,7 +54,7 @@ pub fn load_fen(fen: &str) -> Result<(Position, State), String> {
 }
 
 fn parse_fen_board(fen_board: &str) -> Result<([BB; 2], [BB; 6]), String> {
-    let bb_pieces = [
+    let mut bb_pieces = [
         bitboard::EMPTY,
         bitboard::EMPTY,
         bitboard::EMPTY,
@@ -65,7 +63,7 @@ fn parse_fen_board(fen_board: &str) -> Result<([BB; 2], [BB; 6]), String> {
         bitboard::EMPTY,
     ];
 
-    let bb_sides = [bitboard::EMPTY, bitboard::EMPTY];
+    let mut bb_sides = [bitboard::EMPTY, bitboard::EMPTY];
 
     let mut rank = 7;
     let mut file = 0;
@@ -78,6 +76,7 @@ fn parse_fen_board(fen_board: &str) -> Result<([BB; 2], [BB; 6]), String> {
 
         if c.is_numeric() {
             file += c.to_digit(10).unwrap();
+            continue;
         }
 
         let piece_lowercase = c
@@ -91,11 +90,13 @@ fn parse_fen_board(fen_board: &str) -> Result<([BB; 2], [BB; 6]), String> {
         }
 
         let sq = Square::from(rank as usize, file as usize);
-        let sq_bb = BB::new(sq);
+        let sq_bb = BB::new(&sq);
         bb_pieces[piece_type.to_usize()] |= sq_bb;
 
         let side = if piece_lowercase == c { BLACK } else { WHITE };
         bb_sides[side.to_usize()] |= sq_bb;
+
+        file += 1;
     }
 
     Ok((bb_sides, bb_pieces))
@@ -106,16 +107,16 @@ fn parse_fen_castle(fen_castle: &str) -> Result<CastleRights, String> {
         return Ok(castle_rights::NONE);
     }
 
-    let castle_rights = castle_rights::NONE;
+    let mut castle_rights = castle_rights::NONE;
     for c in fen_castle.chars() {
         if c == 'K' {
-            castle_rights.set(castle_rights::KINGSIDE & castle_rights::WHITE);
+            castle_rights = castle_rights.set(castle_rights::KINGSIDE & castle_rights::WHITE);
         } else if c == 'Q' {
-            castle_rights.set(castle_rights::QUEENSIDE & castle_rights::WHITE);
+            castle_rights = castle_rights.set(castle_rights::QUEENSIDE & castle_rights::WHITE);
         } else if c == 'k' {
-            castle_rights.set(castle_rights::KINGSIDE & castle_rights::BLACK);
+            castle_rights = castle_rights.set(castle_rights::KINGSIDE & castle_rights::BLACK);
         } else if c == 'q' {
-            castle_rights.set(castle_rights::QUEENSIDE & castle_rights::BLACK);
+            castle_rights = castle_rights.set(castle_rights::QUEENSIDE & castle_rights::BLACK);
         } else {
             return Err("invalid character in castle rights".to_string());
         }

@@ -1,13 +1,16 @@
 use core::fmt;
 
 use crate::{
-    bitboard::BB,
-    piece_type::PieceType,
-    position::Position,
+    bitboard::{self},
+    fen,
+    move_gen::pseudo_legal,
+    move_list::MoveList,
+    mv::{EncodedMove, Move, PromotionMove, KING_SIDE_CASTLE, QUEEN_SIDE_CASTLE},
+    piece_type::{PieceType, PROMOTE_TYPE_ARR},
     side::{self, Side},
-    square::Square,
-    state::State,
-    util::grid_to_string,
+    square,
+    state::position::Position,
+    state::{castle_rights, State},
 };
 
 pub struct Game {
@@ -16,50 +19,460 @@ pub struct Game {
 }
 
 impl Game {
-    pub fn at(self, sq: Square) -> Option<(PieceType, Side)> {
-        let sq_bb = BB::new(sq);
-        for (i, bb) in self.position.bb_pieces.iter().enumerate() {
-            if (bb.to_owned() & sq_bb).not_empty() {
-                let piece_type = PieceType::try_from(i).unwrap();
-                let side = if (bb.to_owned() & self.position.bb_sides[side::WHITE.to_usize()])
-                    .not_empty()
-                {
-                    side::WHITE
-                } else {
-                    side::BLACK
-                };
-                return Some((piece_type, side));
+    pub fn from_fen(fen: &str) -> Result<Game, String> {
+        let (position, state) = fen::load_fen(&fen)?;
+
+        Ok(Game { position, state })
+    }
+
+    pub fn state(&self) -> &State {
+        &self.state
+    }
+
+    pub fn position(&self) -> &Position {
+        &self.position
+    }
+
+    pub fn pseudo_legal_moves(&self, side: &Side) -> () {
+        let friendly_occupied = self.position().bb_sides()[side.to_usize()];
+        let enemy_occupied = self.position().bb_sides()[side.other_side().to_usize()];
+
+        let mut mv_list = MoveList::new();
+        for (i, piece_bb) in self.position().bb_pieces().iter().enumerate() {
+            let piece_type = PieceType::try_from(i).expect("did not find a piece type when iterating over bb_pieces during pseudo legal moves search");
+            let piece_bb_iter = (*piece_bb & self.position().bb_sides()[side.to_usize()]).iter();
+
+            for from in piece_bb_iter {
+                match piece_type {
+                    PieceType::Pawn => {
+                        let moves_bb = pseudo_legal::pawn(
+                            &from,
+                            friendly_occupied,
+                            enemy_occupied,
+                            self.state().en_passant(),
+                            &side,
+                        );
+
+                        let promote_rank_bb = if *side == side::WHITE {
+                            bitboard::ROW_8
+                        } else {
+                            bitboard::ROW_1
+                        };
+
+                        for to in moves_bb.iter() {
+                            let is_capture = enemy_occupied.is_set(&to);
+
+                            if to == self.state().en_passant().unwrap_or(square::NULL) {
+                                mv_list.push_move(Move::EnPassant(EncodedMove::new(
+                                    from.to_u8(),
+                                    to.to_u8(),
+                                )));
+                            } else if promote_rank_bb.is_set(&to) {
+                                for promote_type in PROMOTE_TYPE_ARR.iter() {
+                                    mv_list.push_move(if is_capture {
+                                        Move::Promotion(PromotionMove::new(
+                                            from.to_u8(),
+                                            to.to_u8(),
+                                            promote_type,
+                                            true,
+                                        ))
+                                    } else {
+                                        Move::Promotion(PromotionMove::new(
+                                            from.to_u8(),
+                                            to.to_u8(),
+                                            promote_type,
+                                            false,
+                                        ))
+                                    })
+                                }
+                            } else if is_capture {
+                                mv_list.push_move(Move::Capture(EncodedMove::new(
+                                    from.to_u8(),
+                                    to.to_u8(),
+                                )));
+                            } else {
+                                mv_list.push_move(Move::Regular(EncodedMove::new(
+                                    from.to_u8(),
+                                    to.to_u8(),
+                                )));
+                            }
+                        }
+                    }
+                    PieceType::Knight => {
+                        let moves_bb = pseudo_legal::knight_attacks(&from, friendly_occupied);
+
+                        mv_list.insert_moves(&from, moves_bb, |from, to| -> Move {
+                            if enemy_occupied.is_set(to) {
+                                Move::Capture(EncodedMove::new(from.to_u8(), to.to_u8()))
+                            } else {
+                                Move::Regular(EncodedMove::new(from.to_u8(), to.to_u8()))
+                            }
+                        })
+                    }
+                    PieceType::Bishop => {
+                        let moves_bb =
+                            pseudo_legal::bishop_attacks(&from, friendly_occupied, enemy_occupied);
+
+                        mv_list.insert_moves(&from, moves_bb, |from, to| -> Move {
+                            if enemy_occupied.is_set(to) {
+                                Move::Capture(EncodedMove::new(from.to_u8(), to.to_u8()))
+                            } else {
+                                Move::Regular(EncodedMove::new(from.to_u8(), to.to_u8()))
+                            }
+                        })
+                    }
+                    PieceType::Rook => {
+                        let moves_bb =
+                            pseudo_legal::rook_attacks(&from, friendly_occupied, enemy_occupied);
+
+                        mv_list.insert_moves(&from, moves_bb, |from, to| -> Move {
+                            if enemy_occupied.is_set(to) {
+                                Move::Capture(EncodedMove::new(from.to_u8(), to.to_u8()))
+                            } else {
+                                Move::Regular(EncodedMove::new(from.to_u8(), to.to_u8()))
+                            }
+                        })
+                    }
+                    PieceType::Queen => {
+                        let moves_bb =
+                            pseudo_legal::queen_attacks(&from, friendly_occupied, enemy_occupied);
+
+                        mv_list.insert_moves(&from, moves_bb, |from, to| -> Move {
+                            if enemy_occupied.is_set(to) {
+                                Move::Capture(EncodedMove::new(from.to_u8(), to.to_u8()))
+                            } else {
+                                Move::Regular(EncodedMove::new(from.to_u8(), to.to_u8()))
+                            }
+                        })
+                    }
+                    PieceType::King => {
+                        let moves_bb = pseudo_legal::king_attacks(&from, friendly_occupied);
+
+                        mv_list.insert_moves(&from, moves_bb, |from, to| -> Move {
+                            if enemy_occupied.is_set(to) {
+                                Move::Capture(EncodedMove::new(from.to_u8(), to.to_u8()))
+                            } else {
+                                Move::Regular(EncodedMove::new(from.to_u8(), to.to_u8()))
+                            }
+                        });
+
+                        let castle_rights = self.state().castle_rights();
+                        if castle_rights.can(side, &castle_rights::QUEENSIDE) {
+                            mv_list.push_move(Move::Castle(QUEEN_SIDE_CASTLE))
+                        }
+                        if castle_rights.can(side, &castle_rights::KINGSIDE) {
+                            mv_list.push_move(Move::Castle(KING_SIDE_CASTLE))
+                        }
+                    }
+                }
             }
         }
-
-        None
     }
 }
 
 impl fmt::Display for Game {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let props = vec![
-            ("side to move", self.state.side_to_move.to_str().to_string()),
-            (" castling rights", self.state.castle_rights.to_string()),
-            (
-                "en-passant",
-                self.state
-                    .en_passant
-                    .map_or("-".to_string(), |s| s.to_string()),
-            ),
-            ("half-move clock", self.state.halfmoves.to_string()),
-            ("full-move number", self.state.fullmoves.to_string()),
-            ("FEN", self.to_fen()),
-        ];
-        let s = grid_to_string(|sq: Square| -> char {
-            let (pc, side) = self.at(sq);
-            if pc.is_none() {
-                '.'
-            } else {
-                pc.to_char()
-            }
-        });
+        let position_str = self.position.to_string();
+        let state_str = self.state.to_string();
 
-        write!(f, "{}", &s)
+        write!(f, "{}\n{}", position_str, state_str)
+    }
+}
+
+#[cfg(test)]
+pub mod test_fen {
+    use super::*;
+    use crate::side;
+    use crate::square::*;
+    use crate::state::castle_rights;
+    use unindent;
+
+    #[test]
+    fn empty_fen() {
+        let fen = "";
+        assert_eq!(true, Game::from_fen(fen).is_err());
+    }
+    #[test]
+    fn invalid_fen_board() {
+        let fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNRz w KQkq - 0 0";
+        assert_eq!(true, Game::from_fen(fen).is_err());
+    }
+    #[test]
+    fn invalid_color() {
+        let fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR z KQkq - 0 0";
+        assert_eq!(true, Game::from_fen(fen).is_err());
+    }
+    #[test]
+    fn invalid_castle_rights() {
+        let fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KaQkq f10 0 0";
+        assert_eq!(true, Game::from_fen(fen).is_err());
+    }
+    #[test]
+    fn invalid_en_passant_sq() {
+        let fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq f10 0 0";
+        assert_eq!(true, Game::from_fen(fen).is_err());
+    }
+    #[test]
+    fn invalid_halfmoves() {
+        let fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq f1 a 0";
+        assert_eq!(true, Game::from_fen(fen).is_err());
+    }
+    #[test]
+    fn invalid_fullmoves() {
+        let fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq f1 0 a";
+        assert_eq!(true, Game::from_fen(fen).is_err());
+    }
+
+    #[test]
+    fn parse_parse_with_starting_fen() {
+        let fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 0";
+        let result = Game::from_fen(fen);
+        match result {
+            Ok(game) => {
+                let expected = unindent::unindent(
+                    "
+                  ABCDEFGH
+                8|rnbqkbnr|8
+                7|pppppppp|7
+                6|........|6
+                5|........|5
+                4|........|4
+                3|........|3
+                2|PPPPPPPP|2
+                1|RNBQKBNR|1
+                  ABCDEFGH
+                ",
+                );
+
+                println!("{}", game.position.to_string());
+                assert_eq!(game.position.to_string(), expected);
+            }
+            Err(e) => {
+                println!("{}", &e);
+                panic!()
+            }
+        }
+    }
+
+    #[test]
+    fn parse_with_default_state() {
+        let fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 0";
+        let result = Game::from_fen(fen);
+        match result {
+            Ok(game) => {
+                assert_eq!(
+                    game.state().castle_rights().to_string(),
+                    (castle_rights::WHITE | castle_rights::BLACK).to_string()
+                );
+                assert_eq!(game.state().halfmoves(), 0);
+                assert_eq!(game.state().fullmoves(), 0);
+            }
+            Err(e) => {
+                println!("{}", &e);
+                panic!()
+            }
+        }
+    }
+
+    #[test]
+    fn parse_parse_with_random_fen() {
+        let fen = "8/8/7p/3KNN1k/2p4p/8/3P2p1/8 w - - 0 0";
+        let result = Game::from_fen(fen);
+        match result {
+            Ok(game) => {
+                let expected = unindent::unindent(
+                    "
+              ABCDEFGH
+            8|........|8
+            7|........|7
+            6|.......p|6
+            5|...KNN.k|5
+            4|..p....p|4
+            3|........|3
+            2|...P..p.|2
+            1|........|1
+              ABCDEFGH
+        ",
+                );
+
+                println!("{}", game.position.to_string());
+                assert_eq!(game.position.to_string(), expected);
+            }
+            Err(e) => {
+                println!("{}", &e);
+                panic!()
+            }
+        }
+    }
+
+    #[test]
+    fn parse_with_stm_1() {
+        let fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 0";
+        let result = Game::from_fen(fen);
+        match result {
+            Ok(game) => {
+                assert_eq!(game.state().side_to_move(), &side::WHITE);
+            }
+            Err(e) => {
+                println!("{}", &e);
+                panic!()
+            }
+        }
+    }
+
+    #[test]
+    fn parse_with_stm_2() {
+        let fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR b KQkq - 0 0";
+        let result = Game::from_fen(fen);
+        match result {
+            Ok(game) => {
+                assert_eq!(game.state().side_to_move(), &side::BLACK);
+            }
+            Err(e) => {
+                println!("{}", &e);
+                panic!()
+            }
+        }
+    }
+
+    #[test]
+    fn parse_with_ep_square_1() {
+        let fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR b KQkq - 0 0";
+        let result = Game::from_fen(fen);
+        match result {
+            Ok(game) => {
+                assert_eq!(game.state().en_passant(), &None);
+            }
+            Err(e) => {
+                println!("{}", &e);
+                panic!()
+            }
+        }
+    }
+
+    #[test]
+    fn parse_with_ep_square_2() {
+        let fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR b KQkq c3 0 0";
+        let result = Game::from_fen(fen);
+        match result {
+            Ok(game) => {
+                assert_eq!(game.state().en_passant(), &Some(C3));
+            }
+            Err(e) => {
+                println!("{}", &e);
+                panic!()
+            }
+        }
+    }
+
+    #[test]
+    fn parse_with_half_move_clock_1() {
+        let fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR b KQkq c3 0 0";
+        let result = Game::from_fen(fen);
+        match result {
+            Ok(game) => {
+                assert_eq!(game.state().halfmoves(), 0);
+            }
+            Err(e) => {
+                println!("{}", &e);
+                panic!()
+            }
+        }
+    }
+
+    #[test]
+    fn parse_with_half_move_clock_2() {
+        let fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR b KQkq c3 23 0";
+        let result = Game::from_fen(fen);
+        match result {
+            Ok(game) => {
+                assert_eq!(game.state().halfmoves(), 23);
+            }
+            Err(e) => {
+                println!("{}", &e);
+                panic!()
+            }
+        }
+    }
+
+    #[test]
+    fn parse_with_full_move_number_1() {
+        let fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR b KQkq c3 0 0";
+        let result = Game::from_fen(fen);
+        match result {
+            Ok(game) => {
+                assert_eq!(game.state().fullmoves(), 0);
+            }
+            Err(e) => {
+                println!("{}", &e);
+                panic!()
+            }
+        }
+    }
+
+    #[test]
+    fn parse_with_full_move_number_2() {
+        let fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR b KQkq c3 0 45";
+        let result = Game::from_fen(fen);
+        match result {
+            Ok(game) => {
+                assert_eq!(game.state().fullmoves(), 45);
+            }
+            Err(e) => {
+                println!("{}", &e);
+                panic!()
+            }
+        }
+    }
+
+    #[test]
+    fn parse_with_castling_rights_1() {
+        let fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR b - c3 0 45";
+        let result = Game::from_fen(fen);
+        match result {
+            Ok(game) => {
+                assert_eq!(game.state().castle_rights(), &castle_rights::NONE);
+            }
+            Err(e) => {
+                println!("{}", &e);
+                panic!()
+            }
+        }
+    }
+
+    #[test]
+    fn parse_with_castling_rights_2() {
+        let fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR b Kq c3 0 45";
+        let result = Game::from_fen(fen);
+        match result {
+            Ok(game) => {
+                let mut expected =
+                    castle_rights::NONE.set(castle_rights::KINGSIDE & castle_rights::WHITE);
+                expected = expected.set(castle_rights::QUEENSIDE & castle_rights::BLACK);
+                assert_eq!(game.state().castle_rights(), &expected);
+            }
+            Err(e) => {
+                println!("{}", &e);
+                panic!()
+            }
+        }
+    }
+
+    #[test]
+    fn parse_with_castling_rights_3() {
+        let fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR b KQkq c3 0 45";
+        let result = Game::from_fen(fen);
+        match result {
+            Ok(game) => {
+                assert_eq!(
+                    game.state().castle_rights(),
+                    &(castle_rights::WHITE | castle_rights::BLACK)
+                );
+            }
+            Err(e) => {
+                println!("{}", &e);
+                panic!()
+            }
+        }
     }
 }

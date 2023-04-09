@@ -1,10 +1,32 @@
-use crate::{bitboard::BB, side::Side};
+use crate::{
+    bitboard::{self, BB},
+    side::Side,
+};
 
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Copy, Clone, PartialEq)]
 pub struct AttackTable([[BB; 6]; 2]);
 
 impl AttackTable {
-    pub fn new() -> AttackTable {}
+    pub fn new() -> AttackTable {
+        AttackTable([
+            [
+                bitboard::EMPTY,
+                bitboard::EMPTY,
+                bitboard::EMPTY,
+                bitboard::EMPTY,
+                bitboard::EMPTY,
+                bitboard::EMPTY,
+            ],
+            [
+                bitboard::EMPTY,
+                bitboard::EMPTY,
+                bitboard::EMPTY,
+                bitboard::EMPTY,
+                bitboard::EMPTY,
+                bitboard::EMPTY,
+            ],
+        ])
+    }
     pub fn get(self, side: &Side) -> [BB; 6] {
         self.0[side.to_usize()]
     }
