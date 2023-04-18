@@ -3,7 +3,7 @@ use std::ops::{BitAnd, BitOr};
 
 use crate::side::{self, Side};
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Copy)]
 pub struct CastleRights(u8);
 
 pub const NONE: CastleRights = CastleRights::new(0);
@@ -21,9 +21,9 @@ impl CastleRights {
         CastleRights(self.0 | rights.0)
     }
 
-    pub fn can(&self, side: &Side, rights: &CastleRights) -> bool {
-        let side_rights = if *side == side::WHITE { WHITE } else { BLACK };
-        let mut rights = rights.0 & side_rights.0;
+    pub fn can(&self, side: Side, rights: CastleRights) -> bool {
+        let side_rights = if side == Side::White { WHITE } else { BLACK };
+        let rights = rights.0 & side_rights.0;
 
         (self.0 & rights) != 0
     }
@@ -62,32 +62,32 @@ pub mod test {
     pub fn can1() {
         let cr = NONE.set(KINGSIDE);
 
-        assert_eq!(cr.can(&side::WHITE, &KINGSIDE), true);
+        assert_eq!(cr.can(Side::White, KINGSIDE), true);
     }
 
     #[test]
     pub fn can2() {
         let cr = NONE.set(KINGSIDE);
 
-        assert_eq!(cr.can(&side::WHITE, &QUEENSIDE), false);
+        assert_eq!(cr.can(Side::White, QUEENSIDE), false);
     }
     #[test]
     pub fn can3() {
         let cr = NONE.set(WHITE);
 
-        assert_eq!(cr.can(&side::WHITE, &QUEENSIDE), true);
+        assert_eq!(cr.can(Side::White, QUEENSIDE), true);
     }
     #[test]
     pub fn can4() {
         let cr = NONE.set(BLACK);
 
-        assert_eq!(cr.can(&side::BLACK, &KINGSIDE), true);
+        assert_eq!(cr.can(Side::Black, KINGSIDE), true);
     }
     #[test]
     pub fn can5() {
         let cr = NONE.set(BLACK);
 
-        assert_eq!(cr.can(&side::WHITE, &KINGSIDE), false);
+        assert_eq!(cr.can(Side::White, KINGSIDE), false);
     }
 }
 

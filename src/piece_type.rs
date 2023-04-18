@@ -15,6 +15,23 @@ pub enum PieceType {
     King = 5,
 }
 
+pub const PROMOTE_TYPE_MAP: [Option<PromoteType>; 6] = [
+    None,
+    Some(PromoteType::Knight),
+    Some(PromoteType::Bishop),
+    Some(PromoteType::Rook),
+    Some(PromoteType::Queen),
+    None,
+];
+pub const PIECE_TYPE_MAP: [PieceType; 6] = [
+    PieceType::Pawn,
+    PieceType::Knight,
+    PieceType::Bishop,
+    PieceType::Rook,
+    PieceType::Queen,
+    PieceType::King,
+];
+
 pub const PROMOTE_TYPE_ARR: [PromoteType; 4] = [
     PromoteType::Knight,
     PromoteType::Bishop,
@@ -47,21 +64,6 @@ impl PromoteType {
     }
 }
 
-impl TryFrom<usize> for PieceType {
-    type Error = ();
-
-    fn try_from(v: usize) -> Result<Self, Self::Error> {
-        match v {
-            0 => Ok(PieceType::Pawn),
-            1 => Ok(PieceType::Knight),
-            2 => Ok(PieceType::Bishop),
-            3 => Ok(PieceType::Rook),
-            4 => Ok(PieceType::Queen),
-            5 => Ok(PieceType::King),
-            _ => Err(()),
-        }
-    }
-}
 impl TryFrom<char> for PieceType {
     type Error = &'static str;
 
@@ -74,19 +76,6 @@ impl TryFrom<char> for PieceType {
             'q' => Ok(PieceType::Queen),
             'k' => Ok(PieceType::King),
             _ => Err("not a valid piece"),
-        }
-    }
-}
-impl TryFrom<u16> for PromoteType {
-    type Error = ();
-
-    fn try_from(v: u16) -> Result<Self, Self::Error> {
-        match v {
-            1 => Ok(PromoteType::Knight),
-            2 => Ok(PromoteType::Bishop),
-            3 => Ok(PromoteType::Rook),
-            4 => Ok(PromoteType::Queen),
-            _ => Err(()),
         }
     }
 }

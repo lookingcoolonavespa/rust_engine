@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use crate::{
     bitboard::{self, BB},
     piece_type::PieceType,
-    side::{Side, BLACK, WHITE},
+    side::Side,
     square::{self, Square},
     state::castle_rights::{self, CastleRights},
     state::position::Position,
@@ -90,10 +90,14 @@ fn parse_fen_board(fen_board: &str) -> Result<([BB; 2], [BB; 6]), String> {
         }
 
         let sq = Square::from(rank as usize, file as usize);
-        let sq_bb = BB::new(&sq);
+        let sq_bb = BB::new(sq);
         bb_pieces[piece_type.to_usize()] |= sq_bb;
 
-        let side = if piece_lowercase == c { BLACK } else { WHITE };
+        let side = if piece_lowercase == c {
+            Side::Black
+        } else {
+            Side::White
+        };
         bb_sides[side.to_usize()] |= sq_bb;
 
         file += 1;

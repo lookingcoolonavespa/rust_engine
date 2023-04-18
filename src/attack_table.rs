@@ -37,7 +37,7 @@ impl AttackTable {
 }
 
 // fn blocking_on_rank(sq: Square, attack_bb: BB) -> bool {
-//     let sq_bb = BB::new(sq);
+//     let sq_bb = BB::new(BB::new(sq);
 //     let blocking_left = (sq_bb.shl(1) & attack_bb).not_empty();
 //     let blocking_right = (sq_bb.shr(2) & attack_bb).not_empty();
 //

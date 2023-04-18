@@ -7,7 +7,7 @@ use crate::{
 #[cfg(test)]
 fn get_w_pawn_pushes() -> [BB; 64] {
     square::ALL.map(|sq| {
-        let sq_bb = BB::new(&sq);
+        let sq_bb = BB::new(sq);
         if sq.rank() == 0 || sq.rank() == 7 {
             bitboard::EMPTY
         } else {
@@ -19,7 +19,7 @@ fn get_w_pawn_pushes() -> [BB; 64] {
 #[cfg(test)]
 fn get_w_pawn_captures() -> [BB; 64] {
     square::ALL.map(|sq| {
-        let sq_bb = BB::new(&sq);
+        let sq_bb = BB::new(sq);
         let next_rank_mask = sq.rank_mask() << 8;
         if sq.rank() == 0 || sq.rank() == 7 {
             bitboard::EMPTY
@@ -32,7 +32,7 @@ fn get_w_pawn_captures() -> [BB; 64] {
 #[cfg(test)]
 fn get_b_pawn_captures() -> [BB; 64] {
     square::ALL.map(|sq| {
-        let sq_bb = BB::new(&sq);
+        let sq_bb = BB::new(sq);
         let next_rank_mask = sq.rank_mask() >> 8;
         if sq.rank() == 0 || sq.rank() == 7 {
             bitboard::EMPTY
@@ -45,7 +45,7 @@ fn get_b_pawn_captures() -> [BB; 64] {
 #[cfg(test)]
 fn get_b_pawn_pushes() -> [BB; 64] {
     square::ALL.map(|sq| {
-        let sq_bb = BB::new(&sq);
+        let sq_bb = BB::new(sq);
         if sq.rank() == 0 || sq.rank() == 7 {
             bitboard::EMPTY
         } else {
@@ -114,6 +114,9 @@ pub mod w_pawn_captures {
     pub fn print() {
         let w_pawn_captures = get_w_pawn_captures();
         println!("{:#?}", w_pawn_captures);
+        // for bb in w_pawn_captures {
+        //     println!("{}", bb);
+        // }
         assert_eq!(true, false)
     }
 }

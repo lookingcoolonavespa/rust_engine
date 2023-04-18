@@ -1,6 +1,6 @@
 use core::fmt;
 
-use crate::bitboard::{BB, FILE_A, ROW_1};
+use crate::bitboard::{BB, BISHOP_RAYS, FILE_A, KNIGHT_JUMPS, ROOK_RAYS, ROW_1};
 
 pub type Internal = usize;
 
@@ -50,6 +50,18 @@ impl Square {
 
     pub fn anti_diagonal_mask(self) -> BB {
         ANTI_DIAGONALS[self.0]
+    }
+
+    pub fn bishop_rays(self) -> BB {
+        BISHOP_RAYS[self.0]
+    }
+
+    pub fn rook_rays(self) -> BB {
+        ROOK_RAYS[self.0]
+    }
+
+    pub fn knight_jumps(self) -> BB {
+        KNIGHT_JUMPS[self.0]
     }
 }
 

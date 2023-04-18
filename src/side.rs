@@ -11,17 +11,17 @@ impl Side {
         self as usize
     }
 
-    pub fn other_side(self) -> Side {
-        if self == WHITE {
-            BLACK
+    pub fn opposite(self) -> Side {
+        if self == Side::White {
+            Side::Black
         } else {
-            WHITE
+            Side::White
         }
     }
 }
 impl fmt::Display for Side {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let str = if *self == WHITE {
+        let str = if *self == Side::White {
             "white".to_string()
         } else {
             "black".to_string()
@@ -29,6 +29,3 @@ impl fmt::Display for Side {
         write!(f, "{}", str)
     }
 }
-
-pub const WHITE: Side = Side::White;
-pub const BLACK: Side = Side::Black;

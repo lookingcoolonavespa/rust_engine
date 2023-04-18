@@ -31,16 +31,16 @@ impl State {
         }
     }
 
-    pub fn en_passant(&self) -> &Option<Square> {
-        &self.en_passant
+    pub fn en_passant(&self) -> Option<Square> {
+        self.en_passant
     }
 
-    pub fn side_to_move(&self) -> &Side {
-        &self.side_to_move
+    pub fn side_to_move(&self) -> Side {
+        self.side_to_move
     }
 
-    pub fn castle_rights(&self) -> &CastleRights {
-        &self.castle_rights
+    pub fn castle_rights(&self) -> CastleRights {
+        self.castle_rights
     }
 
     pub fn halfmoves(&self) -> u16 {
@@ -68,14 +68,13 @@ impl fmt::Display for State {
 
 #[cfg(test)]
 pub mod test_display {
-    use crate::side;
 
     use super::*;
     use crate::square::*;
 
     #[test]
     pub fn no1() {
-        let state = State::new(Some(E4), side::WHITE, castle_rights::WHITE, 0, 0);
+        let state = State::new(Some(E4), Side::White, castle_rights::WHITE, 0, 0);
         let expected = unindent::unindent(
             "
                                   side to move: white

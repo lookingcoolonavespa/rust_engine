@@ -10,9 +10,9 @@ use crate::{
 
 use super::slider::*;
 
-pub fn attacks_for_piece_type(position: &Position, piece_type: &PieceType, side: &Side) -> BB {
+pub fn attacks_for_piece_type(position: &Position, piece_type: &PieceType, side: Side) -> BB {
     let friendly_occupied = position.bb_sides()[side.to_usize()];
-    let enemy_occupied = position.bb_sides()[side.other_side().to_usize()];
+    let enemy_occupied = position.bb_sides()[side.opposite().to_usize()];
     let pieces_bb =
         position.bb_pieces()[piece_type.to_usize()] & position.bb_sides()[side.to_usize()];
 
@@ -21,7 +21,7 @@ pub fn attacks_for_piece_type(position: &Position, piece_type: &PieceType, side:
             let mut attacks = bitboard::EMPTY;
 
             for from in pieces_bb.iter() {
-                attacks |= pawn_attacks(&from, side)
+                attacks |= pawn_attacks(from, side)
             }
 
             attacks
@@ -30,7 +30,7 @@ pub fn attacks_for_piece_type(position: &Position, piece_type: &PieceType, side:
             let mut attacks = bitboard::EMPTY;
 
             for from in pieces_bb.iter() {
-                attacks |= knight_attacks(&from, friendly_occupied)
+                attacks |= knight_attacks(from, friendly_occupied)
             }
 
             attacks
@@ -39,7 +39,7 @@ pub fn attacks_for_piece_type(position: &Position, piece_type: &PieceType, side:
             let mut attacks = bitboard::EMPTY;
 
             for from in pieces_bb.iter() {
-                attacks |= bishop_attacks(&from, friendly_occupied, enemy_occupied)
+                attacks |= bishop_attacks(from, friendly_occupied, enemy_occupied)
             }
 
             attacks
@@ -48,7 +48,7 @@ pub fn attacks_for_piece_type(position: &Position, piece_type: &PieceType, side:
             let mut attacks = bitboard::EMPTY;
 
             for from in pieces_bb.iter() {
-                attacks |= rook_attacks(&from, friendly_occupied, enemy_occupied)
+                attacks |= rook_attacks(from, friendly_occupied, enemy_occupied)
             }
 
             attacks
@@ -57,7 +57,7 @@ pub fn attacks_for_piece_type(position: &Position, piece_type: &PieceType, side:
             let mut attacks = bitboard::EMPTY;
 
             for from in pieces_bb.iter() {
-                attacks |= queen_attacks(&from, friendly_occupied, enemy_occupied)
+                attacks |= queen_attacks(from, friendly_occupied, enemy_occupied)
             }
 
             attacks
@@ -66,7 +66,7 @@ pub fn attacks_for_piece_type(position: &Position, piece_type: &PieceType, side:
             let mut attacks = bitboard::EMPTY;
 
             for from in pieces_bb.iter() {
-                attacks |= king_attacks(&from, enemy_occupied)
+                attacks |= king_attacks(from, enemy_occupied)
             }
 
             attacks
@@ -74,42 +74,42 @@ pub fn attacks_for_piece_type(position: &Position, piece_type: &PieceType, side:
     }
 }
 
-pub fn bishop_attacks(from: &Square, friendly_occupied: BB, enemy_occupied: BB) -> BB {
+pub fn bishop_attacks(from: Square, friendly_occupied: BB, enemy_occupied: BB) -> BB {
     let occupied = friendly_occupied | enemy_occupied;
 
     (diagonal_moves_from_sq(from, occupied) | anti_diagonal_moves_from_sq(from, occupied))
         & !friendly_occupied
 }
 
-pub fn rook_attacks(from: &Square, friendly_occupied: BB, enemy_occupied: BB) -> BB {
+pub fn rook_attacks(from: Square, friendly_occupied: BB, enemy_occupied: BB) -> BB {
     let occupied = friendly_occupied | enemy_occupied;
 
-    (vertical_moves_from_sq(from, occupied) | horizontal_moves_from_sq(&from, occupied))
+    (vertical_moves_from_sq(from, occupied) | horizontal_moves_from_sq(from, occupied))
         & !friendly_occupied
 }
 
-pub fn queen_attacks(from: &Square, friendly_occupied: BB, enemy_occupied: BB) -> BB {
+pub fn queen_attacks(from: Square, friendly_occupied: BB, enemy_occupied: BB) -> BB {
     let occupied = friendly_occupied | enemy_occupied;
-    ((vertical_moves_from_sq(from, occupied) | horizontal_moves_from_sq(&from, occupied))
+    ((vertical_moves_from_sq(from, occupied) | horizontal_moves_from_sq(from, occupied))
         | (diagonal_moves_from_sq(from, occupied) | anti_diagonal_moves_from_sq(from, occupied)))
         & !friendly_occupied
 }
 
-pub fn knight_attacks(from: &Square, friendly_occupied: BB) -> BB {
+pub fn knight_attacks(from: Square, friendly_occupied: BB) -> BB {
     KNIGHT_JUMPS[from.to_usize()] & !friendly_occupied
 }
 
-pub fn king_attacks(from: &Square, friendly_occupied: BB) -> BB {
+pub fn king_attacks(from: Square, friendly_occupied: BB) -> BB {
     KING_MOVES[from.to_usize()] & !friendly_occupied
 }
 
 const PAWN_HOME_RANK: [usize; 2] = [1, 6];
 pub fn pawn(
-    from: &Square,
+    from: Square,
     friendly_occupied: BB,
     enemy_occupied: BB,
-    en_passant: &Option<Square>,
-    color: &Side,
+    en_passant: Option<Square>,
+    color: Side,
 ) -> BB {
     let mut pushes =
         PAWN_PUSHES[color.to_usize()][from.to_usize()] & !(friendly_occupied | enemy_occupied);
@@ -123,15 +123,15 @@ pub fn pawn(
         pushes |= double_push_bb;
     }
     let en_passant_bb: BB = match en_passant {
-        Some(sq) => BB::new(&sq),
+        Some(sq) => BB::new(sq),
         None => bitboard::EMPTY,
     };
 
     (pushes & !(friendly_occupied | enemy_occupied))
-        | (pawn_attacks(&from, color) & (enemy_occupied | en_passant_bb))
+        | (pawn_attacks(from, color) & (enemy_occupied | en_passant_bb))
 }
 
-fn pawn_attacks(from: &Square, color: &Side) -> BB {
+fn pawn_attacks(from: Square, color: Side) -> BB {
     PAWN_CAPTURES[color.to_usize()][from.to_usize()]
 }
 
@@ -143,14 +143,14 @@ pub mod queen_tests {
     #[test]
     pub fn empty_board() {
         let from = square::E4;
-        let attacks = queen_attacks(&from, BB::new(&from), bitboard::EMPTY);
+        let attacks = queen_attacks(from, BB::new(from), bitboard::EMPTY);
         print!("{}", attacks);
 
         let expected = (from.rank_mask()
             | from.file_mask()
             | from.diagonal_mask()
             | from.anti_diagonal_mask())
-            ^ BB::new(&from);
+            ^ BB::new(from);
 
         assert_eq!(attacks, expected);
     }
@@ -168,7 +168,7 @@ pub mod queen_tests {
             square::D3,
             square::D5,
         ]);
-        let attacks = queen_attacks(&from, BB::new(&from), enemy_occupied);
+        let attacks = queen_attacks(from, BB::new(from), enemy_occupied);
         print!("{}", enemy_occupied);
         print!("{}", attacks);
 
@@ -189,7 +189,7 @@ pub mod queen_tests {
             square::D3,
             square::D5,
         ]);
-        let attacks = queen_attacks(&from, friendly_occupied, bitboard::EMPTY);
+        let attacks = queen_attacks(from, friendly_occupied, bitboard::EMPTY);
         print!("{}", friendly_occupied);
         print!("{}", attacks);
 
@@ -207,7 +207,7 @@ pub mod knight_tests {
     pub fn on_a1() {
         let from = A1;
         let expected = get_bb_from_array_of_squares(&[B3, C2]);
-        let attacks = knight_attacks(&from, BB::new(&from));
+        let attacks = knight_attacks(from, BB::new(from));
         println!("{}", attacks);
         assert_eq!(attacks, expected);
     }
@@ -216,7 +216,7 @@ pub mod knight_tests {
     pub fn on_a1_blocked_on_b3() {
         let from = A1;
         let expected = get_bb_from_array_of_squares(&[C2]);
-        let attacks = knight_attacks(&from, get_bb_from_array_of_squares(&[from, B3]));
+        let attacks = knight_attacks(from, get_bb_from_array_of_squares(&[from, B3]));
         println!("{}", attacks);
         assert_eq!(attacks, expected);
     }
@@ -231,7 +231,7 @@ pub mod king_test {
     pub fn on_e4() {
         let from = E4;
         let expected = get_bb_from_array_of_squares(&[E5, E3, D4, D3, D5, F4, F5, F3]);
-        let attacks = king_attacks(&from, BB::new(&from));
+        let attacks = king_attacks(from, BB::new(from));
         println!("{}", attacks);
         assert_eq!(attacks, expected);
     }
@@ -241,7 +241,7 @@ pub mod king_test {
         let from = E4;
         let expected = bitboard::EMPTY;
         let attacks = king_attacks(
-            &from,
+            from,
             get_bb_from_array_of_squares(&[E5, E3, D4, D3, D5, F4, F5, F3]),
         );
         println!("{}", attacks);
@@ -261,8 +261,8 @@ pub mod pawn_test {
         #[test]
         pub fn basic_push() {
             let from = E4;
-            let expected = BB::new(&E5);
-            let attacks = pawn(&from, bitboard::EMPTY, bitboard::EMPTY, &None, &Side::White);
+            let expected = BB::new(E5);
+            let attacks = pawn(from, bitboard::EMPTY, bitboard::EMPTY, None, Side::White);
             println!("{}", attacks);
             assert_eq!(attacks, expected);
         }
@@ -271,7 +271,7 @@ pub mod pawn_test {
         pub fn double_push() {
             let from = E2;
             let expected = get_bb_from_array_of_squares(&[E3, E4]);
-            let attacks = pawn(&from, bitboard::EMPTY, bitboard::EMPTY, &None, &Side::White);
+            let attacks = pawn(from, bitboard::EMPTY, bitboard::EMPTY, None, Side::White);
             println!("{}", attacks);
             assert_eq!(attacks, expected);
         }
@@ -280,7 +280,7 @@ pub mod pawn_test {
         pub fn blocked_single_push() {
             let from = E2;
             let expected = bitboard::EMPTY;
-            let attacks = pawn(&from, bitboard::EMPTY, BB::new(&E3), &None, &Side::White);
+            let attacks = pawn(from, bitboard::EMPTY, BB::new(E3), None, Side::White);
             println!("{}", attacks);
             assert_eq!(attacks, expected);
         }
@@ -288,8 +288,8 @@ pub mod pawn_test {
         #[test]
         pub fn blocked_double_push() {
             let from = E2;
-            let expected = BB::new(&E3);
-            let attacks = pawn(&from, bitboard::EMPTY, BB::new(&E4), &None, &Side::White);
+            let expected = BB::new(E3);
+            let attacks = pawn(from, bitboard::EMPTY, BB::new(E4), None, Side::White);
             println!("{}", attacks);
             assert_eq!(attacks, expected);
         }
@@ -299,11 +299,11 @@ pub mod pawn_test {
             let from = E2;
             let expected = get_bb_from_array_of_squares(&[F3, D3]);
             let attacks = pawn(
-                &from,
-                BB::new(&E3),
+                from,
+                BB::new(E3),
                 get_bb_from_array_of_squares(&[F3, D3]),
-                &None,
-                &Side::White,
+                None,
+                Side::White,
             );
             println!("{}", attacks);
             assert_eq!(attacks, expected);
@@ -314,11 +314,11 @@ pub mod pawn_test {
             let from = E5;
             let expected = get_bb_from_array_of_squares(&[D6]);
             let attacks = pawn(
-                &from,
-                BB::new(&E6),
+                from,
+                BB::new(E6),
                 get_bb_from_array_of_squares(&[D5]),
-                &Some(D6),
-                &Side::White,
+                Some(D6),
+                Side::White,
             );
             println!("{}", attacks);
             assert_eq!(attacks, expected);
@@ -333,8 +333,8 @@ pub mod pawn_test {
         #[test]
         pub fn basic_push() {
             let from = E4;
-            let expected = BB::new(&E3);
-            let attacks = pawn(&from, bitboard::EMPTY, bitboard::EMPTY, &None, &Side::Black);
+            let expected = BB::new(E3);
+            let attacks = pawn(from, bitboard::EMPTY, bitboard::EMPTY, None, Side::Black);
             println!("{}", attacks);
             assert_eq!(attacks, expected);
         }
@@ -343,7 +343,7 @@ pub mod pawn_test {
         pub fn double_push() {
             let from = E7;
             let expected = get_bb_from_array_of_squares(&[E6, E5]);
-            let attacks = pawn(&from, bitboard::EMPTY, bitboard::EMPTY, &None, &Side::Black);
+            let attacks = pawn(from, bitboard::EMPTY, bitboard::EMPTY, None, Side::Black);
             println!("{}", attacks);
             assert_eq!(attacks, expected);
         }
@@ -352,7 +352,7 @@ pub mod pawn_test {
         pub fn blocked_single_push() {
             let from = E7;
             let expected = bitboard::EMPTY;
-            let attacks = pawn(&from, bitboard::EMPTY, BB::new(&E6), &None, &Side::Black);
+            let attacks = pawn(from, bitboard::EMPTY, BB::new(E6), None, Side::Black);
             println!("{}", attacks);
             assert_eq!(attacks, expected);
         }
@@ -360,8 +360,8 @@ pub mod pawn_test {
         #[test]
         pub fn blocked_double_push() {
             let from = E7;
-            let expected = BB::new(&E6);
-            let attacks = pawn(&from, bitboard::EMPTY, BB::new(&E5), &None, &Side::Black);
+            let expected = BB::new(E6);
+            let attacks = pawn(from, bitboard::EMPTY, BB::new(E5), None, Side::Black);
             println!("{}", attacks);
             assert_eq!(attacks, expected);
         }
@@ -371,11 +371,11 @@ pub mod pawn_test {
             let from = E5;
             let expected = get_bb_from_array_of_squares(&[F4, D4]);
             let attacks = pawn(
-                &from,
-                BB::new(&E4),
+                from,
+                BB::new(E4),
                 get_bb_from_array_of_squares(&[F4, D4]),
-                &None,
-                &Side::Black,
+                None,
+                Side::Black,
             );
             println!("{}", attacks);
             assert_eq!(attacks, expected);
@@ -386,11 +386,11 @@ pub mod pawn_test {
             let from = E4;
             let expected = get_bb_from_array_of_squares(&[D3]);
             let attacks = pawn(
-                &from,
-                BB::new(&E3),
+                from,
+                BB::new(E3),
                 get_bb_from_array_of_squares(&[D4]),
-                &Some(D3),
-                &Side::Black,
+                Some(D3),
+                Side::Black,
             );
             println!("{}", attacks);
             assert_eq!(attacks, expected);
