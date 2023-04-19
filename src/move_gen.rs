@@ -1,19 +1,18 @@
 use crate::{
     bitboard::{self, squares_between::bb_squares_between, BB, KING_MOVES, PAWN_CAPTURES},
-    mv::castle,
     piece_type::PieceType,
     side::Side,
     square::Square,
     state::position::Position,
 };
 
-mod legal_check_preprocessing;
+pub mod check_legal;
 mod parallel;
 mod pawn;
 pub mod pseudo_legal;
 mod slider;
 
-fn is_sq_attacked(position: &Position, sq: &Square, attack_side: Side) -> bool {
+fn is_sq_attacked(position: &Position, sq: Square, attack_side: Side) -> bool {
     let occupied = position.bb_occupied();
 
     if (sq.knight_jumps() & position.bb_pc(PieceType::Knight, attack_side)).not_empty() {
@@ -24,7 +23,7 @@ fn is_sq_attacked(position: &Position, sq: &Square, attack_side: Side) -> bool {
     let potential_slider_attackers =
         (diag_attackers & sq.bishop_rays()) | (non_diag_attackers & sq.rook_rays());
     for potential_attack_sq in potential_slider_attackers.iter() {
-        let blockers = occupied & bb_squares_between(&potential_attack_sq, sq);
+        let blockers = occupied & bb_squares_between(potential_attack_sq, sq);
         if blockers.empty() {
             return true;
         }
@@ -57,6 +56,13 @@ pub fn attacks(position: &Position, side: Side) -> BB {
         ^ position.bb_side(side)
 }
 
+pub fn king_safe_squares(position: &Position, king_color: Side, attacked_squares_bb: BB) -> BB {
+    let king_mvs_bb =
+        pseudo_legal::king_attacks(position.king_sq(king_color), position.bb_side(king_color));
+
+    king_mvs_bb & attacked_squares_bb
+}
+
 pub fn checkers_pinners_pinned(position: &Position, attack_side: Side) -> (BB, BB, BB) {
     // check for checks by knight and pawn first bc they dont care about the position of other
     // pieces
@@ -77,8 +83,9 @@ pub fn checkers_pinners_pinned(position: &Position, attack_side: Side) -> (BB, B
     let (diag_attackers, non_diag_attackers) = position.bb_sliders(attack_side);
     let potential_checkers =
         (diag_attackers & king_sq.bishop_rays()) | (non_diag_attackers & king_sq.rook_rays());
+
     for sq in potential_checkers.iter() {
-        let bb_squares_between = bb_squares_between(&king_sq, &sq);
+        let bb_squares_between = bb_squares_between(king_sq, sq);
         let blockers = bb_squares_between & occupied;
 
         if blockers.empty() {
@@ -168,161 +175,23 @@ pub mod test_checkers_pinners {
     }
 }
 
-// #[cfg(test)]
-// pub mod test_can_castle {
-//     use super::*;
-//     use crate::fen::STARTING_POSITION_FEN;
-//     use crate::game::Game;
-//     use crate::mv::castle::Castle;
-//     use crate::{side, square::*};
-//
-//     #[test]
-//     fn is_sq_attacked_1() {
-//         let fen = "8/8/3P2N1/1P6/pRK2p1B/P4qpk/2p4r/b6b w - - 0 1";
-//         let result = Game::from_fen(fen);
-//         assert!(result.is_ok());
-//         let game = result.unwrap();
-//         let position = game.position();
-//
-//         assert_eq!(is_sq_attacked(position, &F7, side::BLACK), false);
-//         assert_eq!(is_sq_attacked(position, &G4, side::BLACK), true);
-//         assert_eq!(is_sq_attacked(position, &A4, Side::White), true);
-//         assert_eq!(is_sq_attacked(position, &B8, side::BLACK), false);
-//     }
-//
-//     #[test]
-//     fn cant_castle_if_pieces_occupy_squares_1() {
-//         let fen = STARTING_POSITION_FEN;
-//         let result = Game::from_fen(fen);
-//         assert!(result.is_ok());
-//         let game = result.unwrap();
-//         assert_eq!(
-//             can_castle(game.position(), Castle::QueenSide, side::WHITE),
-//             false
-//         );
-//         assert_eq!(
-//             can_castle(game.position(), Castle::KingSide, side::WHITE),
-//             false
-//         );
-//     }
-//
-//     #[test]
-//     fn cant_castle_if_pieces_occupy_squares_2() {
-//         let fen = "rn2k1nr/pppppppp/8/8/8/8/PPPPPPPP/RN2K1NR w KQkq - 0 1";
-//         let result = Game::from_fen(fen);
-//         assert!(result.is_ok());
-//         let game = result.unwrap();
-//         assert_eq!(
-//             can_castle(game.position(), Castle::QueenSide, side::BLACK),
-//             false
-//         );
-//         assert_eq!(
-//             can_castle(game.position(), Castle::KingSide, side::BLACK),
-//             false
-//         );
-//         assert_eq!(
-//             can_castle(game.position(), Castle::QueenSide, side::WHITE),
-//             false
-//         );
-//         assert_eq!(
-//             can_castle(game.position(), Castle::KingSide, side::WHITE),
-//             false
-//         );
-//     }
-//
-//     #[test]
-//     fn cant_castle_if_pieces_occupy_squares_3() {
-//         let fen = "r1b1kb1r/pppppppp/8/8/8/8/PPPPPPPP/R1B1KB1R w KQkq - 0 1";
-//         let result = Game::from_fen(fen);
-//         assert!(result.is_ok());
-//         let game = result.unwrap();
-//         assert_eq!(
-//             can_castle(game.position(), Castle::QueenSide, side::BLACK),
-//             false
-//         );
-//         assert_eq!(
-//             can_castle(game.position(), Castle::KingSide, side::BLACK),
-//             false
-//         );
-//         assert_eq!(
-//             can_castle(game.position(), Castle::QueenSide, side::WHITE),
-//             false
-//         );
-//         assert_eq!(
-//             can_castle(game.position(), Castle::KingSide, side::WHITE),
-//             false
-//         );
-//     }
-//
-//     #[test]
-//     fn cant_castle_if_pieces_occupy_squares_4() {
-//         let fen = "r2qk2r/pppppppp/8/8/8/8/PPPPPPPP/R2QK2R w KQkq - 0 1";
-//         let result = Game::from_fen(fen);
-//         assert!(result.is_ok());
-//         let game = result.unwrap();
-//         assert_eq!(
-//             can_castle(game.position(), Castle::QueenSide, side::BLACK),
-//             false
-//         );
-//         assert_eq!(
-//             can_castle(game.position(), Castle::KingSide, side::BLACK),
-//             true
-//         );
-//         assert_eq!(
-//             can_castle(game.position(), Castle::QueenSide, side::WHITE),
-//             false
-//         );
-//         assert_eq!(
-//             can_castle(game.position(), Castle::KingSide, side::WHITE),
-//             true
-//         );
-//     }
-//
-//     #[test]
-//     fn can_castle_if_squares_are_empty() {
-//         let fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/R3K2R w KQkq - 0 1";
-//         let result = Game::from_fen(fen);
-//         assert!(result.is_ok());
-//         let game = result.unwrap();
-//         assert_eq!(
-//             can_castle(game.position(), Castle::QueenSide, side::WHITE),
-//             true
-//         );
-//         assert_eq!(
-//             can_castle(game.position(), Castle::KingSide, side::WHITE),
-//             true
-//         );
-//     }
-//
-//     #[test]
-//     fn cant_castle_pass_through_sq_is_attacked() {
-//         let fen = "r3k2r/2P3P1/8/8/8/2n3n1/8/R3K2R w KQkq - 0 1";
-//         let result = Game::from_fen(fen);
-//         assert!(result.is_ok());
-//         let game = result.unwrap();
-//         assert_eq!(
-//             can_castle(game.position(), Castle::QueenSide, side::WHITE),
-//             false
-//         );
-//         assert_eq!(
-//             can_castle(game.position(), Castle::KingSide, side::WHITE),
-//             false
-//         );
-//     }
-//
-//     #[test]
-//     fn can_castle_pass_through_sq_isnt_attacked() {
-//         let fen = "r3k2r/P5b1/8/8/8/8/8/R3K2R w KQkq - 0 1";
-//         let result = Game::from_fen(fen);
-//         assert!(result.is_ok());
-//         let game = result.unwrap();
-//         assert_eq!(
-//             can_castle(game.position(), Castle::QueenSide, side::WHITE),
-//             true
-//         );
-//         assert_eq!(
-//             can_castle(game.position(), Castle::KingSide, side::WHITE),
-//             true
-//         );
-//     }
-// }
+#[cfg(test)]
+pub mod test_is_sq_attacked {
+    use super::*;
+    use crate::game::Game;
+    use crate::square::*;
+
+    #[test]
+    fn is_sq_attacked_1() {
+        let fen = "8/8/3P2N1/1P6/pRK2p1B/P4qpk/2p4r/b6b w - - 0 1";
+        let result = Game::from_fen(fen);
+        assert!(result.is_ok());
+        let game = result.unwrap();
+        let position = game.position();
+
+        assert_eq!(is_sq_attacked(position, F7, Side::Black), false);
+        assert_eq!(is_sq_attacked(position, G4, Side::Black), true);
+        assert_eq!(is_sq_attacked(position, A4, Side::White), true);
+        assert_eq!(is_sq_attacked(position, B8, Side::Black), false);
+    }
+}

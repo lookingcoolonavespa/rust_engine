@@ -32,6 +32,7 @@ pub mod get_bb {
     use super::*;
     use crate::square::*;
 
+    #[ignore = "only needed for print"]
     #[test]
     fn print() {
         let first = get_bb_from_array_of_squares(&[D1, C1]);

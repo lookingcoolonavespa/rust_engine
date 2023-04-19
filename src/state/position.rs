@@ -73,6 +73,28 @@ impl Position {
 
         None
     }
+
+    pub fn remove_piece(&self, piece_type: PieceType, from: Square, side: Side) {
+        let from_bb = BB::new(from);
+
+        self.bb_pieces[piece_type.to_usize()] ^= from_bb;
+        self.bb_sides[side.to_usize()] ^= from_bb;
+    }
+
+    pub fn place_piece(&self, piece_type: PieceType, to: Square, side: Side) {
+        let to_bb = BB::new(to);
+
+        self.bb_pieces[piece_type.to_usize()] |= to_bb;
+        self.bb_sides[side.to_usize()] |= to_bb;
+    }
+
+    pub fn move_piece(&self, piece_type: PieceType, from: Square, to: Square, side: Side) {
+        let from_bb = BB::new(from);
+        let to_bb = BB::new(to);
+
+        self.bb_pieces[piece_type.to_usize()] ^= from_bb & to_bb;
+        self.bb_sides[side.to_usize()] ^= from_bb & to_bb;
+    }
 }
 
 impl fmt::Display for Position {

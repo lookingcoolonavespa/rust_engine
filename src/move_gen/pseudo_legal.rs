@@ -2,77 +2,11 @@ use std::ops::{Shl, Shr};
 
 use crate::{
     bitboard::{self, BB, KING_MOVES, KNIGHT_JUMPS, PAWN_CAPTURES, PAWN_PUSHES},
-    piece_type::PieceType,
     side::Side,
     square::Square,
-    state::position::Position,
 };
 
 use super::slider::*;
-
-pub fn attacks_for_piece_type(position: &Position, piece_type: &PieceType, side: Side) -> BB {
-    let friendly_occupied = position.bb_sides()[side.to_usize()];
-    let enemy_occupied = position.bb_sides()[side.opposite().to_usize()];
-    let pieces_bb =
-        position.bb_pieces()[piece_type.to_usize()] & position.bb_sides()[side.to_usize()];
-
-    match piece_type {
-        PieceType::Pawn => {
-            let mut attacks = bitboard::EMPTY;
-
-            for from in pieces_bb.iter() {
-                attacks |= pawn_attacks(from, side)
-            }
-
-            attacks
-        }
-        PieceType::Knight => {
-            let mut attacks = bitboard::EMPTY;
-
-            for from in pieces_bb.iter() {
-                attacks |= knight_attacks(from, friendly_occupied)
-            }
-
-            attacks
-        }
-        PieceType::Bishop => {
-            let mut attacks = bitboard::EMPTY;
-
-            for from in pieces_bb.iter() {
-                attacks |= bishop_attacks(from, friendly_occupied, enemy_occupied)
-            }
-
-            attacks
-        }
-        PieceType::Rook => {
-            let mut attacks = bitboard::EMPTY;
-
-            for from in pieces_bb.iter() {
-                attacks |= rook_attacks(from, friendly_occupied, enemy_occupied)
-            }
-
-            attacks
-        }
-        PieceType::Queen => {
-            let mut attacks = bitboard::EMPTY;
-
-            for from in pieces_bb.iter() {
-                attacks |= queen_attacks(from, friendly_occupied, enemy_occupied)
-            }
-
-            attacks
-        }
-        PieceType::King => {
-            let mut attacks = bitboard::EMPTY;
-
-            for from in pieces_bb.iter() {
-                attacks |= king_attacks(from, enemy_occupied)
-            }
-
-            attacks
-        }
-    }
-}
 
 pub fn bishop_attacks(from: Square, friendly_occupied: BB, enemy_occupied: BB) -> BB {
     let occupied = friendly_occupied | enemy_occupied;

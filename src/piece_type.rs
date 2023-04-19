@@ -1,7 +1,7 @@
 use subenum::subenum;
 
 #[subenum(PromoteType)]
-#[derive(Copy, Clone)]
+#[derive(PartialEq, Copy, Clone)]
 pub enum PieceType {
     Pawn = 0,
     #[subenum(PromoteType)]
@@ -41,6 +41,10 @@ pub const PROMOTE_TYPE_ARR: [PromoteType; 4] = [
 const PIECE_CHARS: [char; 6] = ['p', 'n', 'b', 'r', 'q', 'k'];
 
 impl PieceType {
+    pub fn to_u16(self) -> u16 {
+        self as u16
+    }
+
     pub fn to_u8(self) -> u8 {
         self as u8
     }
@@ -55,6 +59,10 @@ impl PieceType {
 }
 
 impl PromoteType {
+    pub fn to_u16(self) -> u16 {
+        self as u16
+    }
+
     pub fn to_u8(self) -> u8 {
         self as u8
     }

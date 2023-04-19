@@ -1,6 +1,6 @@
 pub mod squares_between;
 
-use crate::util::grid_to_string;
+use crate::{square, util::grid_to_string};
 use std::{
     fmt,
     ops::{
@@ -24,7 +24,7 @@ impl BB {
     }
 
     pub fn bitscan(self) -> Square {
-        crate::square::ALL[self.0.trailing_zeros() as usize]
+        square::ALL[self.0.trailing_zeros() as usize]
     }
 
     pub fn is_set(self, sq: Square) -> bool {
@@ -267,12 +267,6 @@ pub mod test {
             ",
         );
         assert_eq!(END_ROWS.to_string(), expected);
-    }
-
-    #[test]
-    fn bishop_ray1() {
-        println!("{}", BISHOP_RAYS[0]);
-        assert_eq!(false, true)
     }
 }
 

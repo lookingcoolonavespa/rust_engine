@@ -11,8 +11,13 @@ impl MoveList {
         self.0.iter()
     }
 
-    pub fn insert_moves<F: Fn(Square, Square) -> Move>(&mut self, from: Square, target: BB, f: F) {
-        for to in target.iter() {
+    pub fn insert_moves<F: Fn(Square, Square) -> Move>(
+        &mut self,
+        from: Square,
+        moves_bb: BB,
+        f: F,
+    ) {
+        for to in moves_bb.iter() {
             self.0.push(f(from, to))
         }
     }

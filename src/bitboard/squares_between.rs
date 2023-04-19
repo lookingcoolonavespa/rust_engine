@@ -1,7 +1,7 @@
 use crate::bitboard::BB;
 use crate::square::Square;
 
-pub fn bb_squares_between(a: &Square, b: &Square) -> BB {
+pub fn bb_squares_between(a: Square, b: Square) -> BB {
     SQUARES_BETWEEN[a.to_usize()][b.to_usize()]
 }
 

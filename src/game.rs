@@ -1,9 +1,12 @@
-use crate::{bitboard::BB, mv::Decode};
 use core::fmt;
 
 use crate::{
-    bitboard, fen,
-    move_gen::pseudo_legal,
+    bitboard::{self, BB},
+    fen,
+    move_gen::{
+        check_legal::{is_legal_castle, is_legal_regular_move, LegalCheckPreprocessing},
+        pseudo_legal,
+    },
     move_list::MoveList,
     mv::{EncodedMove, Move, PromotionMove, KING_SIDE_CASTLE, QUEEN_SIDE_CASTLE},
     piece_type::{PieceType, PIECE_TYPE_MAP, PROMOTE_TYPE_ARR},
@@ -63,39 +66,20 @@ impl Game {
                             let is_capture = enemy_occupied.is_set(to);
 
                             if to == self.state().en_passant().unwrap_or(square::NULL) {
-                                mv_list.push_move(Move::EnPassant(EncodedMove::new(
-                                    from.to_u8(),
-                                    to.to_u8(),
-                                    PieceType::Pawn,
-                                )));
+                                mv_list
+                                    .push_move(Move::EnPassant(EncodedMove::new(from, to, true)));
                             } else if promote_rank_bb.is_set(to) {
                                 for promote_type in PROMOTE_TYPE_ARR.iter() {
-                                    mv_list.push_move(if is_capture {
-                                        Move::PromotionCapture(PromotionMove::new(
-                                            from.to_u8(),
-                                            to.to_u8(),
-                                            promote_type,
-                                        ))
-                                    } else {
-                                        Move::Promotion(PromotionMove::new(
-                                            from.to_u8(),
-                                            to.to_u8(),
-                                            promote_type,
-                                        ))
-                                    })
+                                    mv_list.push_move(Move::Promotion(PromotionMove::new(
+                                        from,
+                                        to,
+                                        promote_type,
+                                        is_capture,
+                                    )))
                                 }
-                            } else if is_capture {
-                                mv_list.push_move(Move::Capture(EncodedMove::new(
-                                    from.to_u8(),
-                                    to.to_u8(),
-                                    piece_type,
-                                )));
                             } else {
-                                mv_list.push_move(Move::Regular(EncodedMove::new(
-                                    from.to_u8(),
-                                    to.to_u8(),
-                                    piece_type,
-                                )));
+                                mv_list
+                                    .push_move(Move::Piece(EncodedMove::new(from, to, is_capture)));
                             }
                         }
                     }
@@ -103,19 +87,7 @@ impl Game {
                         let moves_bb = pseudo_legal::knight_attacks(from, friendly_occupied);
 
                         mv_list.insert_moves(from, moves_bb, |from, to| -> Move {
-                            if enemy_occupied.is_set(to) {
-                                Move::Capture(EncodedMove::new(
-                                    from.to_u8(),
-                                    to.to_u8(),
-                                    PieceType::Knight,
-                                ))
-                            } else {
-                                Move::Regular(EncodedMove::new(
-                                    from.to_u8(),
-                                    to.to_u8(),
-                                    PieceType::Knight,
-                                ))
-                            }
+                            Move::Piece(EncodedMove::new(from, to, enemy_occupied.is_set(to)))
                         })
                     }
                     PieceType::Bishop => {
@@ -123,19 +95,7 @@ impl Game {
                             pseudo_legal::bishop_attacks(from, friendly_occupied, enemy_occupied);
 
                         mv_list.insert_moves(from, moves_bb, |from, to| -> Move {
-                            if enemy_occupied.is_set(to) {
-                                Move::Capture(EncodedMove::new(
-                                    from.to_u8(),
-                                    to.to_u8(),
-                                    PieceType::Bishop,
-                                ))
-                            } else {
-                                Move::Regular(EncodedMove::new(
-                                    from.to_u8(),
-                                    to.to_u8(),
-                                    PieceType::Bishop,
-                                ))
-                            }
+                            Move::Piece(EncodedMove::new(from, to, enemy_occupied.is_set(to)))
                         })
                     }
                     PieceType::Rook => {
@@ -143,19 +103,7 @@ impl Game {
                             pseudo_legal::rook_attacks(from, friendly_occupied, enemy_occupied);
 
                         mv_list.insert_moves(from, moves_bb, |from, to| -> Move {
-                            if enemy_occupied.is_set(to) {
-                                Move::Capture(EncodedMove::new(
-                                    from.to_u8(),
-                                    to.to_u8(),
-                                    PieceType::Rook,
-                                ))
-                            } else {
-                                Move::Regular(EncodedMove::new(
-                                    from.to_u8(),
-                                    to.to_u8(),
-                                    PieceType::Rook,
-                                ))
-                            }
+                            Move::Piece(EncodedMove::new(from, to, enemy_occupied.is_set(to)))
                         })
                     }
                     PieceType::Queen => {
@@ -163,38 +111,14 @@ impl Game {
                             pseudo_legal::queen_attacks(from, friendly_occupied, enemy_occupied);
 
                         mv_list.insert_moves(from, moves_bb, |from, to| -> Move {
-                            if enemy_occupied.is_set(to) {
-                                Move::Capture(EncodedMove::new(
-                                    from.to_u8(),
-                                    to.to_u8(),
-                                    PieceType::Queen,
-                                ))
-                            } else {
-                                Move::Regular(EncodedMove::new(
-                                    from.to_u8(),
-                                    to.to_u8(),
-                                    PieceType::Queen,
-                                ))
-                            }
+                            Move::Piece(EncodedMove::new(from, to, enemy_occupied.is_set(to)))
                         })
                     }
                     PieceType::King => {
                         let moves_bb = pseudo_legal::king_attacks(from, friendly_occupied);
 
                         mv_list.insert_moves(from, moves_bb, |from, to| -> Move {
-                            if enemy_occupied.is_set(to) {
-                                Move::Capture(EncodedMove::new(
-                                    from.to_u8(),
-                                    to.to_u8(),
-                                    PieceType::King,
-                                ))
-                            } else {
-                                Move::Regular(EncodedMove::new(
-                                    from.to_u8(),
-                                    to.to_u8(),
-                                    PieceType::King,
-                                ))
-                            }
+                            Move::King(EncodedMove::new(from, to, enemy_occupied.is_set(to)))
                         });
 
                         let castle_rights = self.state().castle_rights();
@@ -210,54 +134,48 @@ impl Game {
         }
     }
 
-    // fn is_legal_move(&self, mv: EncodedMove, checkers_pinners_pinned: (BB, BB, BB)) {
-    //     let (checkers, pinners, pinned) = checkers_pinners_pinned;
-    //     let (from_bb, to_bb) = mv.decode_into_bb();
-    //     let piece_type = mv.piece_type();
-    //
-    //     let num_of_checkers = checkers.count_ones();
-    //     if num_of_checkers > 1 {
-    //         match piece_type {
-    //             PieceType::King => return (king),
-    //             _ => {
-    //                 return false;
-    //             }
-    //         }
-    //     } else if num_of_checkers == 1 {
-    //         match piece_type {
-    //             PieceType::King => {}
-    //             _ => {}
-    //         }
-    //     }
-    //
-    //     true
-    // }
+    pub fn is_legal(&self, mv: Move, legal_check_preprocessing: LegalCheckPreprocessing) -> bool {
+        match mv {
+            Move::King(king_mv) => is_legal_regular_move(
+                &self.position,
+                king_mv,
+                true,
+                self.state.side_to_move(),
+                &legal_check_preprocessing,
+            ),
+            Move::Piece(piece_mv) => is_legal_regular_move(
+                &self.position,
+                piece_mv,
+                false,
+                self.state.side_to_move(),
+                &legal_check_preprocessing,
+            ),
+            Move::Promotion(promotion_mv) => is_legal_regular_move(
+                &self.position,
+                promotion_mv,
+                false,
+                self.state.side_to_move(),
+                &legal_check_preprocessing,
+            ),
+            Move::EnPassant(en_passant_mv) => true,
+            Move::Castle(castle_mv) => is_legal_castle(
+                &self.position,
+                castle_mv.decode(),
+                self.state.side_to_move(),
+                legal_check_preprocessing.attacked_squares_bb(),
+                legal_check_preprocessing.checkers(),
+            ),
+        }
+    }
 
-    // pub fn is_legal(
-    //     &self,
-    //     mv: Move,
-    //     piece_type: PieceType,
-    //     checkers_pinners_pinned: (BB, BB, BB),
-    // ) -> bool {
-    //     let (checkers, pinners, pinned) = checkers_pinners_pinned;
-    //
-    //     match mv {
-    //         Move::Regular(mv) | Move::Capture(mv) => {}
-    //         Move::Promotion(mv) | Move::PromotionCapture(mv) => true,
-    //         Move::EnPassant(en_passant_mv) => true,
-    //         Move::Castle(castle_mv) => {
-    //             if checkers.not_empty() {
-    //                 return false;
-    //             }
-    //
-    //             can_castle(
-    //                 &self.position,
-    //                 castle_mv.decode(),
-    //                 self.state.side_to_move(),
-    //             )
-    //         }
-    //     }
-    // }
+    pub fn make_move(&self, mv: Move) -> PieceType {
+        match mv {
+            Move::King(mv) | Move::Piece(mv) => {}
+            Move::Castle(castle_mv) => {}
+            Move::Promotion(promotion_mv) => {}
+            Move::EnPassant(en_passant_mv) => {}
+        }
+    }
 }
 
 impl fmt::Display for Game {
