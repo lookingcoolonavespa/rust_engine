@@ -4,7 +4,7 @@ pub mod position;
 use core::fmt;
 
 use self::castle_rights::CastleRights;
-use crate::{side::Side, square::Square};
+use crate::{mv::castle::Castle, side::Side, square::Square};
 
 pub struct State {
     en_passant: Option<Square>,
@@ -49,6 +49,38 @@ impl State {
 
     pub fn fullmoves(&self) -> u16 {
         self.fullmoves
+    }
+
+    pub fn en_passant_capture_sq(&self) -> Option<Square> {
+        match self.en_passant {
+            Some(sq) => {
+                if self.side_to_move == Side::White {
+                    Some(sq.change_rank(sq.rank() - 1))
+                } else {
+                    Some(sq.change_rank(sq.rank() + 1))
+                }
+            }
+            None => None,
+        }
+    }
+
+    pub fn remove_castle_rights(&mut self, side: Side, castle: Castle) {
+        self.castle_rights = self.castle_rights.remove_rights(side, castle);
+    }
+
+    pub fn remove_castle_rights_for_color(&mut self, side: Side) {
+        self.castle_rights = self.castle_rights.remove_rights_for_color(side);
+    }
+
+    pub fn update(&mut self, en_passant: Option<Square>, should_increase_halfmoves: bool) {
+        self.halfmoves = if should_increase_halfmoves {
+            self.halfmoves + 1
+        } else {
+            0
+        };
+        self.fullmoves += 1;
+        self.en_passant = en_passant;
+        self.side_to_move = self.side_to_move.opposite();
     }
 }
 

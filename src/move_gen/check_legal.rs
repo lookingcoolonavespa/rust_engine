@@ -1,9 +1,6 @@
 use crate::{
     bitboard::{squares_between::bb_squares_between, BB},
-    mv::{
-        castle::{castle_must_clear_squares, castle_pass_through_squares, Castle},
-        Decode,
-    },
+    mv::{castle::Castle, Decode},
     side::Side,
     square::Square,
     state::position::Position,
@@ -17,6 +14,19 @@ pub struct LegalCheckPreprocessing {
 }
 
 impl LegalCheckPreprocessing {
+    pub fn new(
+        checkers: BB,
+        pinners: BB,
+        pinned: BB,
+        attacked_squares_bb: BB,
+    ) -> LegalCheckPreprocessing {
+        LegalCheckPreprocessing {
+            checkers,
+            pinners,
+            pinned,
+            attacked_squares_bb,
+        }
+    }
     pub fn pinners(&self) -> BB {
         self.pinners
     }
@@ -91,8 +101,6 @@ pub fn is_legal_regular_move(
             }
 
             if num_of_checkers == 1 {
-                // find piece giving check, see if moves captures the checker
-                // find squares between checker and king, see if move is in between
                 let checkers = legal_check_preprocessing.checkers();
                 let checker_sq = checkers.bitscan();
                 let squares_btwn_checker_and_king =
@@ -118,12 +126,12 @@ pub fn is_legal_castle(
         return false;
     }
     let occupied = position.bb_occupied();
-    let must_clear_squares = castle_must_clear_squares(side, castle);
+    let must_clear_squares = castle.must_clear_squares(side);
     if (occupied & must_clear_squares).not_empty() {
         return false;
     }
 
-    (castle_pass_through_squares(side, castle) & attacked_squares_bb).empty()
+    (castle.pass_through_squares(side) & attacked_squares_bb).empty()
 }
 
 #[cfg(test)]
@@ -136,6 +144,7 @@ pub mod test_is_pinned_move_legal {
         },
         move_list::MoveList,
         mv::{EncodedMove, Move},
+        piece_type::PieceType,
         side::Side,
         square::*,
     };
@@ -178,9 +187,9 @@ pub mod test_is_pinned_move_legal {
         let enemy_occupied = game.position().bb_side(side.opposite());
         let cb = |from: Square, to: Square| -> Move {
             if enemy_occupied.is_set(to) {
-                Move::Piece(EncodedMove::new(from, to, true))
+                Move::Piece(EncodedMove::new(from, to, PieceType::Queen, true))
             } else {
-                Move::Piece(EncodedMove::new(from, to, false))
+                Move::Piece(EncodedMove::new(from, to, PieceType::Queen, false))
             }
         };
         legal_move_list.insert_moves(from, legal_moves_bb, cb);
@@ -231,9 +240,9 @@ pub mod test_is_pinned_move_legal {
         let enemy_occupied = game.position().bb_side(side.opposite());
         let cb = |from: Square, to: Square| -> Move {
             if enemy_occupied.is_set(to) {
-                Move::Piece(EncodedMove::new(from, to, true))
+                Move::Piece(EncodedMove::new(from, to, PieceType::Queen, true))
             } else {
-                Move::Piece(EncodedMove::new(from, to, false))
+                Move::Piece(EncodedMove::new(from, to, PieceType::Queen, false))
             }
         };
         legal_move_list.insert_moves(from, legal_moves_bb, cb);
@@ -267,6 +276,7 @@ pub mod test_is_legal_regular_or_capture_move {
         game::Game,
         move_gen::{attacks, checkers_pinners_pinned},
         mv::EncodedMove,
+        piece_type::PieceType,
     };
 
     use super::*;
@@ -291,8 +301,8 @@ pub mod test_is_legal_regular_or_capture_move {
             attacked_squares_bb,
         };
 
-        let legal_mv = EncodedMove::new(E2, H5, true);
-        let illegal_mv = EncodedMove::new(E2, D3, false);
+        let legal_mv = EncodedMove::new(E2, H5, PieceType::Queen, true);
+        let illegal_mv = EncodedMove::new(E2, D3, PieceType::Queen, false);
         assert_eq!(
             is_legal_regular_move(position, legal_mv, false, side, &legal_check_preprocessing),
             true
@@ -328,8 +338,8 @@ pub mod test_is_legal_regular_or_capture_move {
             attacked_squares_bb,
         };
 
-        let legal_mv = EncodedMove::new(D2, E2, false);
-        let illegal_mv = EncodedMove::new(D2, D3, false);
+        let legal_mv = EncodedMove::new(D2, E2, PieceType::Queen, false);
+        let illegal_mv = EncodedMove::new(D2, D3, PieceType::Queen, false);
         assert_eq!(
             is_legal_regular_move(position, legal_mv, false, side, &legal_check_preprocessing),
             true
@@ -365,8 +375,8 @@ pub mod test_is_legal_regular_or_capture_move {
             attacked_squares_bb,
         };
 
-        let legal_mv = EncodedMove::new(D1, E1, false);
-        let illegal_mv = EncodedMove::new(D2, E2, false);
+        let legal_mv = EncodedMove::new(D1, E1, PieceType::King, false);
+        let illegal_mv = EncodedMove::new(D2, E2, PieceType::Queen, false);
         assert_eq!(
             is_legal_regular_move(position, legal_mv, true, side, &legal_check_preprocessing),
             true
@@ -385,7 +395,7 @@ pub mod test_is_legal_regular_or_capture_move {
 }
 
 #[cfg(test)]
-pub mod test_can_castle {
+pub mod test_is_legal_castle {
     use super::*;
     use crate::bitboard;
     use crate::fen::STARTING_POSITION_FEN;

@@ -2,7 +2,7 @@ pub mod castle;
 
 use crate::{
     bitboard::BB,
-    piece_type::{PromoteType, PROMOTE_TYPE_MAP},
+    piece_type::{PieceType, PromoteType, PIECE_TYPE_MAP},
     square::{self, Square},
 };
 
@@ -13,21 +13,34 @@ pub trait Decode {
     fn decode_into_bb(&self) -> (BB, BB);
 }
 
+#[derive(Clone, Copy)]
 pub enum Move {
     King(EncodedMove),
     Piece(EncodedMove),
-    Castle(CastleMove),
+    Castle(Castle),
     Promotion(PromotionMove),
     EnPassant(EncodedMove),
 }
 
+#[derive(Clone, Copy)]
 pub struct EncodedMove(u16);
 
 impl EncodedMove {
-    pub fn new(from: Square, to: Square, capture: bool) -> EncodedMove {
+    pub fn new(from: Square, to: Square, piece_type: PieceType, capture: bool) -> EncodedMove {
         EncodedMove(
-            ((if capture { 1u16 } else { 0u16 }) << 15 | to.to_u16() << 6 | from.to_u16()) as u16,
+            ((if capture { 1u16 } else { 0u16 }) << 15
+                | piece_type.to_u16() << 12
+                | to.to_u16() << 6
+                | from.to_u16()) as u16,
         )
+    }
+
+    pub fn piece_type(&self) -> PieceType {
+        PIECE_TYPE_MAP[((self.0 >> 12) & 7) as usize]
+    }
+
+    pub fn is_capture(&self) -> bool {
+        self.0 >> 15 == 1
     }
 }
 impl Decode for EncodedMove {
@@ -43,16 +56,7 @@ impl Decode for EncodedMove {
     }
 }
 
-pub struct CastleMove(Castle);
-pub const QUEEN_SIDE_CASTLE: CastleMove = CastleMove(Castle::QueenSide);
-pub const KING_SIDE_CASTLE: CastleMove = CastleMove(Castle::KingSide);
-
-impl CastleMove {
-    pub fn decode(&self) -> Castle {
-        self.0
-    }
-}
-
+#[derive(Clone, Copy)]
 pub struct PromotionMove(u16);
 
 impl PromotionMove {
@@ -70,8 +74,12 @@ impl PromotionMove {
         )
     }
 
-    pub fn promote_piece_type(self) -> PromoteType {
-        PROMOTE_TYPE_MAP[(self.0 >> 12) as usize].unwrap()
+    pub fn promote_piece_type(self) -> PieceType {
+        PIECE_TYPE_MAP[((self.0 >> 12) & 7) as usize]
+    }
+
+    pub fn is_capture(&self) -> bool {
+        self.0 >> 15 == 1
     }
 }
 

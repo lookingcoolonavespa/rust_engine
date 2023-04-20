@@ -15,14 +15,6 @@ pub enum PieceType {
     King = 5,
 }
 
-pub const PROMOTE_TYPE_MAP: [Option<PromoteType>; 6] = [
-    None,
-    Some(PromoteType::Knight),
-    Some(PromoteType::Bishop),
-    Some(PromoteType::Rook),
-    Some(PromoteType::Queen),
-    None,
-];
 pub const PIECE_TYPE_MAP: [PieceType; 6] = [
     PieceType::Pawn,
     PieceType::Knight,

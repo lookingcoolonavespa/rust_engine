@@ -2,6 +2,7 @@ use std::collections::HashMap;
 
 use crate::{
     bitboard::{self, BB},
+    piece::Piece,
     piece_type::PieceType,
     side::Side,
     square::{self, Square},
@@ -16,7 +17,7 @@ pub fn load_fen(fen: &str) -> Result<(Position, State), String> {
     let mut fen_state = fen.split(" ");
 
     let fen_board = fen_state.next().ok_or("fen string is empty")?;
-    let (bb_sides, bb_pieces) = parse_fen_board(fen_board)?;
+    let (bb_sides, bb_pieces, board) = parse_fen_board(fen_board)?;
 
     let fen_side_to_move = fen_state.next().ok_or("fen string is missing fields")?;
     let side_map: HashMap<&str, Side> = HashMap::from([("w", Side::White), ("b", Side::Black)]);
@@ -42,7 +43,7 @@ pub fn load_fen(fen: &str) -> Result<(Position, State), String> {
         Err(_) => return Err("fullmoves is not a number".to_string()),
     };
     Ok((
-        Position::new(bb_sides, bb_pieces),
+        Position::new(bb_sides, bb_pieces, board),
         State::new(
             en_passant,
             *side_to_move,
@@ -53,7 +54,7 @@ pub fn load_fen(fen: &str) -> Result<(Position, State), String> {
     ))
 }
 
-fn parse_fen_board(fen_board: &str) -> Result<([BB; 2], [BB; 6]), String> {
+fn parse_fen_board(fen_board: &str) -> Result<([BB; 2], [BB; 6], [Option<Piece>; 64]), String> {
     let mut bb_pieces = [
         bitboard::EMPTY,
         bitboard::EMPTY,
@@ -64,6 +65,7 @@ fn parse_fen_board(fen_board: &str) -> Result<([BB; 2], [BB; 6]), String> {
     ];
 
     let mut bb_sides = [bitboard::EMPTY, bitboard::EMPTY];
+    let mut board: [Option<Piece>; 64] = [None; 64];
 
     let mut rank = 7;
     let mut file = 0;
@@ -90,6 +92,7 @@ fn parse_fen_board(fen_board: &str) -> Result<([BB; 2], [BB; 6]), String> {
         }
 
         let sq = Square::from(rank as usize, file as usize);
+
         let sq_bb = BB::new(sq);
         bb_pieces[piece_type.to_usize()] |= sq_bb;
 
@@ -100,10 +103,12 @@ fn parse_fen_board(fen_board: &str) -> Result<([BB; 2], [BB; 6]), String> {
         };
         bb_sides[side.to_usize()] |= sq_bb;
 
+        board[sq.to_usize()] = Some(Piece::new(side, piece_type));
+
         file += 1;
     }
 
-    Ok((bb_sides, bb_pieces))
+    Ok((bb_sides, bb_pieces, board))
 }
 
 fn parse_fen_castle(fen_castle: &str) -> Result<CastleRights, String> {

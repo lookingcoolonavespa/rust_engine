@@ -2,8 +2,11 @@ use core::fmt;
 
 use crate::attack_table::AttackTable;
 use crate::bitboard::BB;
-use crate::piece_type::{PieceType, PIECE_TYPE_MAP};
-use crate::side::{self, *};
+use crate::move_gen::is_sq_attacked;
+use crate::mv::castle::Castle;
+use crate::piece::Piece;
+use crate::piece_type::PieceType;
+use crate::side::*;
 use crate::square::Square;
 use crate::util::grid_to_string;
 
@@ -12,13 +15,15 @@ pub struct Position {
     bb_sides: [BB; 2],
     bb_pieces: [BB; 6],
     attack_tables: AttackTable,
+    board: [Option<Piece>; 64],
 }
 impl Position {
-    pub fn new(bb_sides: [BB; 2], bb_pieces: [BB; 6]) -> Position {
+    pub fn new(bb_sides: [BB; 2], bb_pieces: [BB; 6], board: [Option<Piece>; 64]) -> Position {
         Position {
             bb_sides,
             bb_pieces,
             attack_tables: AttackTable::new(),
+            board,
         }
     }
 
@@ -57,43 +62,52 @@ impl Position {
         (queens | bishops, queens | rooks)
     }
 
-    pub fn at(self, sq: Square) -> Option<(PieceType, Side)> {
-        let sq_bb = BB::new(sq);
-        for (i, bb) in self.bb_pieces.iter().enumerate() {
-            if (*bb & sq_bb).not_empty() {
-                let piece_type = PIECE_TYPE_MAP[i];
-                let side = if (sq_bb & self.bb_sides[Side::White.to_usize()]).not_empty() {
-                    Side::White
-                } else {
-                    Side::Black
-                };
-                return Some((piece_type, side));
-            }
-        }
-
-        None
+    pub fn at(&self, sq: Square) -> Option<Piece> {
+        self.board[sq.to_usize()]
     }
 
-    pub fn remove_piece(&self, piece_type: PieceType, from: Square, side: Side) {
+    pub fn remove_piece(&mut self, piece_type: PieceType, from: Square, side: Side) {
         let from_bb = BB::new(from);
 
         self.bb_pieces[piece_type.to_usize()] ^= from_bb;
         self.bb_sides[side.to_usize()] ^= from_bb;
+
+        self.board[from.to_usize()] = None;
     }
 
-    pub fn place_piece(&self, piece_type: PieceType, to: Square, side: Side) {
+    pub fn remove_at(&mut self, sq: Square) -> Option<Piece> {
+        let result = self.board[sq.to_usize()];
+        if result.is_some() {
+            let piece = result.unwrap();
+            self.remove_piece(piece.piece_type(), sq, piece.side());
+        }
+
+        result
+    }
+
+    pub fn place_piece(&mut self, piece_type: PieceType, to: Square, side: Side) {
         let to_bb = BB::new(to);
 
         self.bb_pieces[piece_type.to_usize()] |= to_bb;
         self.bb_sides[side.to_usize()] |= to_bb;
+
+        self.board[to.to_usize()] = Some(Piece::new(side, piece_type));
     }
 
-    pub fn move_piece(&self, piece_type: PieceType, from: Square, to: Square, side: Side) {
+    pub fn move_piece(&mut self, piece_type: PieceType, from: Square, to: Square, side: Side) {
         let from_bb = BB::new(from);
         let to_bb = BB::new(to);
 
-        self.bb_pieces[piece_type.to_usize()] ^= from_bb & to_bb;
-        self.bb_sides[side.to_usize()] ^= from_bb & to_bb;
+        self.bb_pieces[piece_type.to_usize()] ^= from_bb | to_bb;
+        self.bb_sides[side.to_usize()] ^= from_bb | to_bb;
+
+        self.board[from.to_usize()] = None;
+        self.board[to.to_usize()] = Some(Piece::new(side, piece_type));
+    }
+
+    pub fn in_check(&self, side: Side) -> bool {
+        let king_sq = self.king_sq(side);
+        is_sq_attacked(&self, king_sq, side.opposite())
     }
 }
 
@@ -104,7 +118,8 @@ impl fmt::Display for Position {
             if result.is_none() {
                 '.'
             } else {
-                let (pc, side) = result.unwrap();
+                let piece = result.unwrap();
+                let (side, pc) = piece.decode();
 
                 return match side {
                     Side::White => pc.to_char().to_uppercase().nth(0).unwrap(),

@@ -1,4 +1,7 @@
+use crate::square::*;
 use core::fmt;
+
+const ROOK_START_SQUARES: [(Square, Square); 2] = [(A1, H1), (A8, H8)];
 
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub enum Side {
@@ -9,6 +12,14 @@ pub enum Side {
 impl Side {
     pub fn to_usize(self) -> usize {
         self as usize
+    }
+
+    pub fn to_u8(self) -> u8 {
+        self as u8
+    }
+
+    pub fn rook_start_squares(&self) -> (Square, Square) {
+        ROOK_START_SQUARES[self.to_usize()]
     }
 
     pub fn opposite(self) -> Side {

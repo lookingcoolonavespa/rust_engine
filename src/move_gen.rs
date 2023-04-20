@@ -12,7 +12,7 @@ mod pawn;
 pub mod pseudo_legal;
 mod slider;
 
-fn is_sq_attacked(position: &Position, sq: Square, attack_side: Side) -> bool {
+pub fn is_sq_attacked(position: &Position, sq: Square, attack_side: Side) -> bool {
     let occupied = position.bb_occupied();
 
     if (sq.knight_jumps() & position.bb_pc(PieceType::Knight, attack_side)).not_empty() {

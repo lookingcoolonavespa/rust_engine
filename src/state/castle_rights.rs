@@ -1,7 +1,7 @@
 use core::fmt;
 use std::ops::{BitAnd, BitOr};
 
-use crate::side::{self, Side};
+use crate::{mv::castle::Castle, side::Side};
 
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub struct CastleRights(u8);
@@ -11,6 +11,8 @@ pub const KINGSIDE: CastleRights = CastleRights::new(0b1010);
 pub const QUEENSIDE: CastleRights = CastleRights::new(0b0101);
 pub const WHITE: CastleRights = CastleRights::new(0b1100);
 pub const BLACK: CastleRights = CastleRights::new(0b0011);
+const COLOR_RIGHTS: [CastleRights; 2] = [WHITE, BLACK];
+const CASTLE_RIGHTS: [CastleRights; 2] = [QUEENSIDE, KINGSIDE];
 
 impl CastleRights {
     pub const fn new(u8: u8) -> CastleRights {
@@ -26,6 +28,16 @@ impl CastleRights {
         let rights = rights.0 & side_rights.0;
 
         (self.0 & rights) != 0
+    }
+
+    pub fn remove_rights(self, side: Side, castle: Castle) -> CastleRights {
+        CastleRights(
+            self.0 ^ (COLOR_RIGHTS[side.to_usize()].0 & CASTLE_RIGHTS[castle.to_usize()].0),
+        )
+    }
+
+    pub fn remove_rights_for_color(self, side: Side) -> CastleRights {
+        CastleRights(self.0 ^ (COLOR_RIGHTS[side.to_usize()].0))
     }
 }
 
