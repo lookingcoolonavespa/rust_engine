@@ -11,6 +11,7 @@ mod piece_type;
 mod side;
 mod square;
 mod state;
+mod uci;
 mod util;
 
 #[cfg(test)]

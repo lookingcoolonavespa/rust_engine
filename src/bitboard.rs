@@ -1,6 +1,6 @@
 pub mod squares_between;
 
-use crate::{square, util::grid_to_string};
+use crate::util::grid_to_string;
 use std::{
     fmt,
     ops::{
@@ -24,7 +24,7 @@ impl BB {
     }
 
     pub fn bitscan(self) -> Square {
-        square::ALL[self.0.trailing_zeros() as usize]
+        Square::new(self.0.trailing_zeros() as usize)
     }
 
     pub fn is_set(self, sq: Square) -> bool {

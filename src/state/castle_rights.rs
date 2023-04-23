@@ -19,6 +19,10 @@ impl CastleRights {
         CastleRights(u8)
     }
 
+    pub fn to_u32(&self) -> u32 {
+        self.0 as u32
+    }
+
     pub fn set(self, rights: CastleRights) -> CastleRights {
         CastleRights(self.0 | rights.0)
     }

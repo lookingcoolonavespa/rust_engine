@@ -9,9 +9,15 @@ pub enum Side {
     Black = 1,
 }
 
+pub const SIDE_MAP: [Side; 2] = [Side::White, Side::Black];
+
 impl Side {
     pub fn to_usize(self) -> usize {
         self as usize
+    }
+
+    pub fn to_u32(self) -> u32 {
+        self as u32
     }
 
     pub fn to_u8(self) -> u8 {

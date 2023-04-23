@@ -10,7 +10,9 @@ pub struct LegalCheckPreprocessing {
     checkers: BB,
     pinners: BB,
     pinned: BB,
-    attacked_squares_bb: BB,
+    // the bb representing the squares attacked with the king removed
+    // the king is removed to ensure the the danger squares are accurate
+    attacked_squares_with_king_gone_bb: BB,
 }
 
 impl LegalCheckPreprocessing {
@@ -18,13 +20,13 @@ impl LegalCheckPreprocessing {
         checkers: BB,
         pinners: BB,
         pinned: BB,
-        attacked_squares_bb: BB,
+        attacked_squares_with_king_gone_bb: BB,
     ) -> LegalCheckPreprocessing {
         LegalCheckPreprocessing {
             checkers,
             pinners,
             pinned,
-            attacked_squares_bb,
+            attacked_squares_with_king_gone_bb,
         }
     }
     pub fn pinners(&self) -> BB {
@@ -39,8 +41,8 @@ impl LegalCheckPreprocessing {
         self.checkers
     }
 
-    pub fn attacked_squares_bb(&self) -> BB {
-        self.attacked_squares_bb
+    pub fn attacked_squares_with_king_gone_bb(&self) -> BB {
+        self.attacked_squares_with_king_gone_bb
     }
 
     pub fn num_of_checkers(&self) -> u32 {
@@ -74,45 +76,51 @@ fn is_pinned_move_legal(from_sq: Square, to_sq: Square, king_sq: Square) -> bool
     false
 }
 
+pub fn is_legal_king_move(
+    mv: impl Decode,
+    legal_check_preprocessing: &LegalCheckPreprocessing,
+) -> bool {
+    let (_, to_sq) = mv.decode_into_squares();
+    let attacked_squares_bb = legal_check_preprocessing.attacked_squares_with_king_gone_bb();
+    !attacked_squares_bb.is_set(to_sq)
+}
+
 pub fn is_legal_regular_move(
     position: &Position,
     mv: impl Decode,
-    is_king: bool,
     side: Side,
     legal_check_preprocessing: &LegalCheckPreprocessing,
 ) -> bool {
     let (from_sq, to_sq) = mv.decode_into_squares();
-    let attacked_squares_bb = legal_check_preprocessing.attacked_squares_bb();
 
     let num_of_checkers = legal_check_preprocessing.num_of_checkers();
 
-    match is_king {
-        true => return !attacked_squares_bb.is_set(to_sq),
-        false => {
-            let pinned = legal_check_preprocessing.pinned();
-            let is_pinned = pinned.is_set(from_sq);
+    let pinned = legal_check_preprocessing.pinned();
+    let is_pinned = pinned.is_set(from_sq);
 
-            if num_of_checkers == 0 && !is_pinned {
-                return true;
-            }
-
-            if num_of_checkers == 0 && is_pinned {
-                return is_pinned_move_legal(from_sq, to_sq, position.king_sq(side));
-            }
-
-            if num_of_checkers == 1 {
-                let checkers = legal_check_preprocessing.checkers();
-                let checker_sq = checkers.bitscan();
-                let squares_btwn_checker_and_king =
-                    checkers | bb_squares_between(checker_sq, position.king_sq(side));
-
-                return squares_btwn_checker_and_king.is_set(to_sq);
-            }
-
-            // num of checkers is 2
-            false
-        }
+    if num_of_checkers == 0 && !is_pinned {
+        return true;
     }
+
+    if num_of_checkers == 0 && is_pinned {
+        return is_pinned_move_legal(from_sq, to_sq, position.king_sq(side));
+    }
+
+    if num_of_checkers == 1 {
+        if is_pinned && !is_pinned_move_legal(from_sq, to_sq, position.king_sq(side)) {
+            return false;
+        }
+
+        let checkers = legal_check_preprocessing.checkers();
+        let checker_sq = checkers.bitscan();
+        let squares_btwn_checker_and_king =
+            checkers | bb_squares_between(checker_sq, position.king_sq(side));
+
+        return squares_btwn_checker_and_king.is_set(to_sq);
+    }
+
+    // num of checkers is 2
+    false
 }
 
 pub fn is_legal_castle(
@@ -136,6 +144,8 @@ pub fn is_legal_castle(
 
 #[cfg(test)]
 pub mod test_is_pinned_move_legal {
+    use core::panic;
+
     use crate::{
         game::Game,
         move_gen::slider::{
@@ -166,6 +176,7 @@ pub mod test_is_pinned_move_legal {
             true
         );
     }
+
     #[test]
     fn pinned_on_file() {
         let fen = "4k3/4r3/8/8/8/8/4Q3/4K3 w - - 0 1";
@@ -202,7 +213,9 @@ pub mod test_is_pinned_move_legal {
                     let (from_sq, to_sq) = mv.decode_into_squares();
                     assert_eq!(is_pinned_move_legal(from_sq, to_sq, king_sq), true);
                 }
-                _ => {}
+                _ => {
+                    panic!()
+                }
             }
         }
         for illegal_mv in illegal_move_list.iter() {
@@ -211,7 +224,9 @@ pub mod test_is_pinned_move_legal {
                     let (from_sq, to_sq) = mv.decode_into_squares();
                     assert_eq!(is_pinned_move_legal(from_sq, to_sq, king_sq), false);
                 }
-                _ => {}
+                _ => {
+                    panic!();
+                }
             }
         }
     }
@@ -274,7 +289,7 @@ pub mod test_is_pinned_move_legal {
 pub mod test_is_legal_regular_or_capture_move {
     use crate::{
         game::Game,
-        move_gen::{attacks, checkers_pinners_pinned},
+        move_gen::{attacks, attacks_with_king_gone, checkers_pinners_pinned},
         mv::EncodedMove,
         piece_type::PieceType,
     };
@@ -283,7 +298,7 @@ pub mod test_is_legal_regular_or_capture_move {
     use crate::square::*;
 
     #[test]
-    fn no_1() {
+    fn can_capture_checker() {
         let fen = "4k3/8/8/7b/8/8/4Q3/3K4 w - - 0 1";
         let result = Game::from_fen(fen);
         assert!(result.is_ok());
@@ -298,29 +313,23 @@ pub mod test_is_legal_regular_or_capture_move {
             checkers,
             pinners,
             pinned,
-            attacked_squares_bb,
+            attacked_squares_with_king_gone_bb: attacked_squares_bb,
         };
 
         let legal_mv = EncodedMove::new(E2, H5, PieceType::Queen, true);
         let illegal_mv = EncodedMove::new(E2, D3, PieceType::Queen, false);
         assert_eq!(
-            is_legal_regular_move(position, legal_mv, false, side, &legal_check_preprocessing),
+            is_legal_regular_move(position, legal_mv, side, &legal_check_preprocessing),
             true
         );
         assert_eq!(
-            is_legal_regular_move(
-                position,
-                illegal_mv,
-                false,
-                side,
-                &legal_check_preprocessing
-            ),
+            is_legal_regular_move(position, illegal_mv, side, &legal_check_preprocessing),
             false
         );
     }
 
     #[test]
-    fn no_2() {
+    fn can_block_check() {
         let fen = "4k3/8/8/7b/8/8/3Q4/3K4 w - - 0 1";
         let result = Game::from_fen(fen);
         assert!(result.is_ok());
@@ -335,62 +344,86 @@ pub mod test_is_legal_regular_or_capture_move {
             checkers,
             pinners,
             pinned,
-            attacked_squares_bb,
+            attacked_squares_with_king_gone_bb: attacked_squares_bb,
         };
 
         let legal_mv = EncodedMove::new(D2, E2, PieceType::Queen, false);
         let illegal_mv = EncodedMove::new(D2, D3, PieceType::Queen, false);
         assert_eq!(
-            is_legal_regular_move(position, legal_mv, false, side, &legal_check_preprocessing),
+            is_legal_regular_move(position, legal_mv, side, &legal_check_preprocessing),
             true
         );
         assert_eq!(
-            is_legal_regular_move(
-                position,
-                illegal_mv,
-                false,
-                side,
-                &legal_check_preprocessing
-            ),
+            is_legal_regular_move(position, illegal_mv, side, &legal_check_preprocessing),
             false
         );
     }
 
     #[test]
-    fn no_3() {
+    fn cant_block_when_there_are_two_checkers() {
         let fen = "4k3/8/8/7b/q7/8/3Q4/3K4 w - - 0 1";
         let result = Game::from_fen(fen);
         assert!(result.is_ok());
 
-        let game = result.unwrap();
-        let position = game.position();
+        let mut game = result.unwrap();
+        let position = game.mut_position();
         let side = Side::White;
 
         let (checkers, pinners, pinned) = checkers_pinners_pinned(position, side.opposite());
-        let attacked_squares_bb = attacks(position, side.opposite());
+        let attacked_squares_bb = attacks_with_king_gone(position, side.opposite());
         let legal_check_preprocessing = LegalCheckPreprocessing {
             checkers,
             pinners,
             pinned,
-            attacked_squares_bb,
+            attacked_squares_with_king_gone_bb: attacked_squares_bb,
         };
 
         let legal_mv = EncodedMove::new(D1, E1, PieceType::King, false);
         let illegal_mv = EncodedMove::new(D2, E2, PieceType::Queen, false);
         assert_eq!(
-            is_legal_regular_move(position, legal_mv, true, side, &legal_check_preprocessing),
+            is_legal_king_move(legal_mv, &legal_check_preprocessing),
             true
         );
         assert_eq!(
-            is_legal_regular_move(
-                position,
-                illegal_mv,
-                false,
-                side,
-                &legal_check_preprocessing
-            ),
+            is_legal_regular_move(position, illegal_mv, side, &legal_check_preprocessing),
             false
         );
+    }
+}
+
+#[cfg(test)]
+pub mod test_is_legal_king_mv {
+    use crate::{
+        game::Game,
+        move_gen::{attacks_with_king_gone, checkers_pinners_pinned},
+        mv::EncodedMove,
+        square::*,
+    };
+
+    use super::*;
+
+    #[test]
+    fn king_cant_move_in_direction_of_attack_ray() {
+        let fen = "3k4/8/8/7q/8/8/4K3/8 w - - 0 1";
+        let result = Game::from_fen(fen);
+        assert!(result.is_ok());
+
+        let mut game = result.unwrap();
+        let from = E2;
+        let to = D1;
+        let mv = EncodedMove::new(from, to, crate::piece_type::PieceType::King, false);
+        let attack_side = game.state().side_to_move().opposite();
+        let position = game.mut_position();
+        let attacked_squares_with_king_gone_bb = attacks_with_king_gone(position, attack_side);
+        let (checkers, pinners, pinned) = checkers_pinners_pinned(game.position(), attack_side);
+        let legal_check_preprocessing = LegalCheckPreprocessing {
+            checkers,
+            pinners,
+            pinned,
+            attacked_squares_with_king_gone_bb,
+        };
+
+        assert!(!is_legal_king_move(mv, &legal_check_preprocessing));
     }
 }
 

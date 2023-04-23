@@ -4,7 +4,11 @@ pub mod position;
 use core::fmt;
 
 use self::castle_rights::CastleRights;
-use crate::{mv::castle::Castle, side::Side, square::Square};
+use crate::{
+    mv::castle::Castle,
+    side::{Side, SIDE_MAP},
+    square::{self, Square},
+};
 
 pub struct State {
     en_passant: Option<Square>,
@@ -31,6 +35,14 @@ impl State {
         }
     }
 
+    pub fn decode_from(&mut self, encoded_state: EncodedState) {
+        self.en_passant = encoded_state.en_passant();
+        self.side_to_move = encoded_state.side_to_move();
+        self.castle_rights = encoded_state.castle_rights();
+        self.halfmoves = encoded_state.halfmoves();
+        self.fullmoves = encoded_state.fullmoves();
+    }
+
     pub fn en_passant(&self) -> Option<Square> {
         self.en_passant
     }
@@ -51,6 +63,10 @@ impl State {
         self.fullmoves
     }
 
+    pub fn encode(&self) -> EncodedState {
+        EncodedState::new(self)
+    }
+
     pub fn en_passant_capture_sq(&self) -> Option<Square> {
         match self.en_passant {
             Some(sq) => {
@@ -64,6 +80,10 @@ impl State {
         }
     }
 
+    pub fn set_en_passant(&mut self, en_passant_sq: Square) {
+        self.en_passant = Some(en_passant_sq);
+    }
+
     pub fn remove_castle_rights(&mut self, side: Side, castle: Castle) {
         self.castle_rights = self.castle_rights.remove_rights(side, castle);
     }
@@ -72,14 +92,19 @@ impl State {
         self.castle_rights = self.castle_rights.remove_rights_for_color(side);
     }
 
-    pub fn update(&mut self, en_passant: Option<Square>, should_increase_halfmoves: bool) {
-        self.halfmoves = if should_increase_halfmoves {
-            self.halfmoves + 1
-        } else {
-            0
-        };
+    pub fn reset_halfmoves(&mut self) {
+        self.halfmoves = 0;
+    }
+
+    pub fn increase_halfmoves(&mut self) {
+        self.halfmoves += 1;
+    }
+
+    pub fn increase_fullmoves(&mut self) {
         self.fullmoves += 1;
-        self.en_passant = en_passant;
+    }
+
+    pub fn update_side_to_move(&mut self) {
         self.side_to_move = self.side_to_move.opposite();
     }
 }
@@ -95,6 +120,45 @@ impl fmt::Display for State {
             self.halfmoves.to_string(),
             self.fullmoves.to_string()
         )
+    }
+}
+
+pub struct EncodedState(u32);
+
+impl EncodedState {
+    pub fn new(state: &State) -> EncodedState {
+        EncodedState(
+            state.side_to_move.to_u32() << 31
+                | state.castle_rights.to_u32() << 27
+                | state.en_passant.unwrap_or(square::NULL).to_u32() << 20
+                | (state.halfmoves as u32) << 10
+                | (state.fullmoves as u32),
+        )
+    }
+
+    pub fn side_to_move(&self) -> Side {
+        SIDE_MAP[(self.0 >> 31) as usize]
+    }
+
+    pub fn castle_rights(&self) -> CastleRights {
+        CastleRights::new(((self.0 >> 27) & 15) as u8)
+    }
+
+    pub fn en_passant(&self) -> Option<Square> {
+        let index = (self.0 >> 20) & 127;
+        if index == 64 {
+            None
+        } else {
+            Some(Square::new(index as usize))
+        }
+    }
+
+    pub fn halfmoves(&self) -> u16 {
+        ((self.0 >> 10) & 1023) as u16
+    }
+
+    pub fn fullmoves(&self) -> u16 {
+        (self.0 & 1023) as u16
     }
 }
 
@@ -115,6 +179,51 @@ pub mod test_display {
                                   halfmoves: 0
                                   fullmoves: 0",
         );
+
+        assert_eq!(state.to_string(), expected);
+    }
+}
+
+#[cfg(test)]
+pub mod test_encoded_state {
+
+    use super::*;
+    use crate::square::*;
+
+    #[test]
+    pub fn no1() {
+        let mut state = State::new(Some(E4), Side::White, castle_rights::WHITE, 0, 0);
+        let encoded_state = EncodedState::new(&state);
+        state.decode_from(encoded_state);
+        let expected = unindent::unindent(
+            "
+                                  side to move: white
+                                  castling rights: KQ
+                                  en-passant: e4
+                                  halfmoves: 0
+                                  fullmoves: 0",
+        );
+
+        println!("{}", state.to_string());
+
+        assert_eq!(state.to_string(), expected);
+    }
+
+    #[test]
+    pub fn no_en_passant() {
+        let mut state = State::new(None, Side::White, castle_rights::WHITE, 0, 0);
+        let encoded_state = EncodedState::new(&state);
+        state.decode_from(encoded_state);
+        let expected = unindent::unindent(
+            "
+                                  side to move: white
+                                  castling rights: KQ
+                                  en-passant: -
+                                  halfmoves: 0
+                                  fullmoves: 0",
+        );
+
+        println!("{}", state.to_string());
 
         assert_eq!(state.to_string(), expected);
     }

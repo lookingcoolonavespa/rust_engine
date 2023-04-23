@@ -2,11 +2,33 @@ use std::ops::{Shl, Shr};
 
 use crate::{
     bitboard::{self, BB, KING_MOVES, KNIGHT_JUMPS, PAWN_CAPTURES, PAWN_PUSHES},
+    piece_type::PieceType,
     side::Side,
     square::Square,
 };
 
 use super::slider::*;
+
+pub fn is_pseudo_legal(
+    piece_type: PieceType,
+    from: Square,
+    to: Square,
+    friendly_occupied: BB,
+    enemy_occupied: BB,
+    en_passant: Option<Square>,
+    side: Side,
+) -> bool {
+    match piece_type {
+        PieceType::King => king_attacks(from, friendly_occupied).is_set(to),
+        PieceType::Pawn => {
+            pawn(from, friendly_occupied, enemy_occupied, en_passant, side).is_set(to)
+        }
+        PieceType::Knight => knight_attacks(from, friendly_occupied).is_set(to),
+        PieceType::Bishop => bishop_attacks(from, friendly_occupied, enemy_occupied).is_set(to),
+        PieceType::Queen => queen_attacks(from, friendly_occupied, enemy_occupied).is_set(to),
+        PieceType::Rook => rook_attacks(from, friendly_occupied, enemy_occupied).is_set(to),
+    }
+}
 
 pub fn bishop_attacks(from: Square, friendly_occupied: BB, enemy_occupied: BB) -> BB {
     let occupied = friendly_occupied | enemy_occupied;
@@ -67,6 +89,23 @@ pub fn pawn(
 
 fn pawn_attacks(from: Square, color: Side) -> BB {
     PAWN_CAPTURES[color.to_usize()][from.to_usize()]
+}
+
+pub fn is_double_pawn_push(from: Square, to: Square, side: Side) -> bool {
+    match side {
+        Side::White => {
+            let from_bb = BB::new(from);
+            let to_bb = BB::new(to);
+
+            from_bb << 16 == to_bb
+        }
+        Side::Black => {
+            let from_bb = BB::new(from);
+            let to_bb = BB::new(to);
+
+            from_bb >> 16 == to_bb
+        }
+    }
 }
 
 #[cfg(test)]

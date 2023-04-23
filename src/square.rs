@@ -16,20 +16,40 @@ impl Square {
         Square((rank * 8) + file)
     }
 
-    pub fn to_usize(&self) -> usize {
+    pub fn to_usize(self) -> usize {
         self.0
     }
 
-    pub fn to_u16(&self) -> u16 {
+    pub fn to_u16(self) -> u16 {
         self.0 as u16
     }
 
-    pub fn to_u8(&self) -> u8 {
+    pub fn to_u8(self) -> u8 {
         self.0 as u8
     }
 
+    pub fn distance(self, sq: Square) -> u32 {
+        let diff = (self.0 - sq.0) as i32;
+        diff.abs() as u32
+    }
+
+    pub fn to_u32(&self) -> u32 {
+        self.0 as u32
+    }
+
     pub fn change_rank(self, rank: Internal) -> Square {
+        assert!(rank < 8);
         Square((self.0 & 7) | (rank * 8))
+    }
+
+    pub fn rank_down(self) -> Square {
+        assert!(self.0 > 7);
+        Square(self.0 - 8)
+    }
+
+    pub fn rank_up(self) -> Square {
+        assert!(self.0 < 57);
+        Square(self.0 + 8)
     }
 
     pub fn file(&self) -> usize {

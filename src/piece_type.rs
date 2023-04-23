@@ -1,7 +1,9 @@
+use std::fmt;
+
 use subenum::subenum;
 
 #[subenum(PromoteType)]
-#[derive(PartialEq, Copy, Clone)]
+#[derive(Debug, PartialEq, Copy, Clone)]
 pub enum PieceType {
     Pawn = 0,
     #[subenum(PromoteType)]
@@ -50,6 +52,12 @@ impl PieceType {
     }
 }
 
+impl fmt::Display for PieceType {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.to_char())
+    }
+}
+
 impl PromoteType {
     pub fn to_u16(self) -> u16 {
         self as u16
@@ -61,6 +69,20 @@ impl PromoteType {
 
     pub fn to_usize(self) -> usize {
         self as usize
+    }
+}
+
+impl TryFrom<char> for PromoteType {
+    type Error = &'static str;
+
+    fn try_from(v: char) -> Result<Self, Self::Error> {
+        match v {
+            'n' => Ok(PromoteType::Knight),
+            'b' => Ok(PromoteType::Bishop),
+            'r' => Ok(PromoteType::Rook),
+            'q' => Ok(PromoteType::Queen),
+            _ => Err("not a valid piece"),
+        }
     }
 }
 

@@ -1,5 +1,7 @@
 pub mod castle;
 
+use std::fmt;
+
 use crate::{
     bitboard::BB,
     piece_type::{PieceType, PromoteType, PIECE_TYPE_MAP},
@@ -16,10 +18,37 @@ pub trait Decode {
 #[derive(Clone, Copy)]
 pub enum Move {
     King(EncodedMove),
+    Rook(EncodedMove),
+    Pawn(EncodedMove),
+    DoublePawnPush(EncodedMove),
     Piece(EncodedMove),
     Castle(Castle),
     Promotion(PromotionMove),
     EnPassant(EncodedMove),
+}
+
+impl fmt::Display for Move {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Move::King(encoded_mv)
+            | Move::Rook(encoded_mv)
+            | Move::Pawn(encoded_mv)
+            | Move::Piece(encoded_mv)
+            | Move::DoublePawnPush(encoded_mv)
+            | Move::EnPassant(encoded_mv) => {
+                let (from, to) = encoded_mv.decode_into_squares();
+                write!(f, "{}{}", from, to)
+            }
+
+            Move::Castle(castle_mv) => {
+                write!(f, "{}", castle_mv)
+            }
+
+            Move::Promotion(promotion_mv) => {
+                write!(f, "{}", promotion_mv)
+            }
+        }
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -53,6 +82,13 @@ impl Decode for EncodedMove {
             Square::new((self.0 & 63) as square::Internal),
             Square::new(((self.0 >> 6) & 63) as square::Internal),
         )
+    }
+}
+
+impl fmt::Display for EncodedMove {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let (from, to) = self.decode_into_squares();
+        write!(f, "{}{}", from, to)
     }
 }
 
@@ -93,5 +129,13 @@ impl Decode for PromotionMove {
             Square::new((self.0 & 63) as square::Internal),
             Square::new(((self.0 >> 6) & 63) as square::Internal),
         )
+    }
+}
+
+impl fmt::Display for PromotionMove {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let (from, to) = self.decode_into_squares();
+        let promote_pc = self.promote_piece_type();
+        write!(f, "{}{}={}", from, to, promote_pc)
     }
 }

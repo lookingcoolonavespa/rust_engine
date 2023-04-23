@@ -1,3 +1,5 @@
+use std::fmt;
+
 use crate::{bitboard::BB, side::Side, square::*};
 
 #[derive(Clone, Copy, Debug)]
@@ -39,5 +41,15 @@ impl Castle {
     }
     pub fn pass_through_squares(&self, side: Side) -> BB {
         CASTLE_PASS_THROUGH_SQUARES[self.to_usize()][side.to_usize()]
+    }
+}
+
+impl fmt::Display for Castle {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let str = match self {
+            Castle::QueenSide => "0-0-0",
+            Castle::KingSide => "0-0",
+        };
+        write!(f, "{}", str)
     }
 }

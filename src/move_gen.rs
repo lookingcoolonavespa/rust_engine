@@ -14,7 +14,6 @@ mod slider;
 
 pub fn is_sq_attacked(position: &Position, sq: Square, attack_side: Side) -> bool {
     let occupied = position.bb_occupied();
-
     if (sq.knight_jumps() & position.bb_pc(PieceType::Knight, attack_side)).not_empty() {
         return true;
     }
@@ -43,24 +42,30 @@ pub fn is_sq_attacked(position: &Position, sq: Square, attack_side: Side) -> boo
     false
 }
 
+pub fn attacks_with_king_gone(position: &mut Position, side: Side) -> BB {
+    let defend_side = side.opposite();
+    let king_sq = position.king_sq(defend_side);
+    position.remove_at(king_sq);
+    let attacks = attacks(position, side);
+    position.place_piece(PieceType::King, king_sq, defend_side);
+
+    attacks
+}
+
 pub fn attacks(position: &Position, side: Side) -> BB {
-    let knight_jumps = parallel::knight_jumps(position.bb_pc(PieceType::Knight, side));
+    let knight_attacks = parallel::knight_jumps(position.bb_pc(PieceType::Knight, side));
+
     let pawn_attacks = parallel::pawn_attacks(position.bb_pc(PieceType::Pawn, side), side);
+
     let (diag_attackers, non_diag_attackers) = position.bb_sliders(side);
     let occupied = position.bb_occupied();
     let diagonal_attacks = parallel::diagonal_attacks(diag_attackers, occupied);
     let file_rank_attacks = parallel::file_rank_attacks(non_diag_attackers, occupied);
+
     let king_attacks = pseudo_legal::king_attacks(position.king_sq(side), position.bb_side(side));
 
-    (king_attacks | pawn_attacks | knight_jumps | diagonal_attacks | file_rank_attacks)
-        ^ position.bb_side(side)
-}
-
-pub fn king_safe_squares(position: &Position, king_color: Side, attacked_squares_bb: BB) -> BB {
-    let king_mvs_bb =
-        pseudo_legal::king_attacks(position.king_sq(king_color), position.bb_side(king_color));
-
-    king_mvs_bb & attacked_squares_bb
+    (king_attacks | pawn_attacks | knight_attacks | diagonal_attacks | file_rank_attacks)
+        & !position.bb_side(side)
 }
 
 pub fn checkers_pinners_pinned(position: &Position, attack_side: Side) -> (BB, BB, BB) {
@@ -193,5 +198,98 @@ pub mod test_is_sq_attacked {
         assert_eq!(is_sq_attacked(position, G4, Side::Black), true);
         assert_eq!(is_sq_attacked(position, A4, Side::White), true);
         assert_eq!(is_sq_attacked(position, B8, Side::Black), false);
+    }
+}
+
+#[cfg(test)]
+pub mod test_attacks {
+    use crate::game::Game;
+
+    use super::*;
+    #[test]
+    fn king_attacks_w_1() {
+        let fen = "4k3/8/8/8/8/8/8/4K3 w - - 0 1";
+        let result = Game::from_fen(fen);
+        assert!(result.is_ok());
+        let game = result.unwrap();
+        let position = game.position();
+        let side = game.state().side_to_move();
+
+        let attacks_bb = attacks(position, side);
+        let expected = unindent::unindent(
+            "
+              ABCDEFGH
+            8|........|8
+            7|........|7
+            6|........|6
+            5|........|5
+            4|........|4
+            3|........|3
+            2|...###..|2
+            1|...#.#..|1
+              ABCDEFGH
+            ",
+        );
+
+        println!("{}", attacks_bb.to_string());
+        assert_eq!(expected, attacks_bb.to_string());
+    }
+
+    #[test]
+    fn bishop_attacks_w_1() {
+        let fen = "4k3/8/1b6/8/8/8/6B1/4K3 w - - 0 1";
+        let result = Game::from_fen(fen);
+        assert!(result.is_ok());
+        let game = result.unwrap();
+        let position = game.position();
+        let side = game.state().side_to_move();
+
+        let attacks_bb = attacks(position, side);
+        let expected = unindent::unindent(
+            "
+              ABCDEFGH
+            8|#.......|8
+            7|.#......|7
+            6|..#.....|6
+            5|...#....|5
+            4|....#...|4
+            3|.....#.#|3
+            2|...###..|2
+            1|...#.#.#|1
+              ABCDEFGH
+            ",
+        );
+
+        println!("{}", attacks_bb.to_string());
+        assert_eq!(expected, attacks_bb.to_string());
+    }
+
+    #[test]
+    fn no_1() {
+        let fen = "4k3/1n6/5N2/8/8/2B5/6B1/4K3 w - - 0 1";
+        let result = Game::from_fen(fen);
+        assert!(result.is_ok());
+        let game = result.unwrap();
+        let position = game.position();
+        let side = game.state().side_to_move();
+
+        let attacks_bb = attacks(position, side);
+        let expected = unindent::unindent(
+            "
+              ABCDEFGH
+            8|....#.#.|8
+            7|.#.#...#|7
+            6|..#.....|6
+            5|#..##..#|5
+            4|.#.##.#.|4
+            3|.....#.#|3
+            2|.#.###..|2
+            1|#..#.#.#|1
+              ABCDEFGH
+            ",
+        );
+
+        println!("{}", attacks_bb.to_string());
+        assert_eq!(expected, attacks_bb.to_string());
     }
 }

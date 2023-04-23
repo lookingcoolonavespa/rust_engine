@@ -3,7 +3,6 @@ use core::fmt;
 use crate::attack_table::AttackTable;
 use crate::bitboard::BB;
 use crate::move_gen::is_sq_attacked;
-use crate::mv::castle::Castle;
 use crate::piece::Piece;
 use crate::piece_type::PieceType;
 use crate::side::*;
@@ -48,6 +47,9 @@ impl Position {
     }
 
     pub fn king_sq(&self, side: Side) -> Square {
+        if (self.bb_pieces[PieceType::King.to_usize()] & self.bb_sides[side.to_usize()]).empty() {
+            println!("{}", self);
+        };
         (self.bb_pieces[PieceType::King.to_usize()] & self.bb_sides[side.to_usize()]).bitscan()
     }
 
@@ -66,13 +68,13 @@ impl Position {
         self.board[sq.to_usize()]
     }
 
-    pub fn remove_piece(&mut self, piece_type: PieceType, from: Square, side: Side) {
-        let from_bb = BB::new(from);
+    pub fn remove_piece(&mut self, piece_type: PieceType, sq: Square, side: Side) {
+        let from_bb = BB::new(sq);
 
         self.bb_pieces[piece_type.to_usize()] ^= from_bb;
         self.bb_sides[side.to_usize()] ^= from_bb;
 
-        self.board[from.to_usize()] = None;
+        self.board[sq.to_usize()] = None;
     }
 
     pub fn remove_at(&mut self, sq: Square) -> Option<Piece> {
@@ -95,14 +97,8 @@ impl Position {
     }
 
     pub fn move_piece(&mut self, piece_type: PieceType, from: Square, to: Square, side: Side) {
-        let from_bb = BB::new(from);
-        let to_bb = BB::new(to);
-
-        self.bb_pieces[piece_type.to_usize()] ^= from_bb | to_bb;
-        self.bb_sides[side.to_usize()] ^= from_bb | to_bb;
-
-        self.board[from.to_usize()] = None;
-        self.board[to.to_usize()] = Some(Piece::new(side, piece_type));
+        self.remove_piece(piece_type, from, side);
+        self.place_piece(piece_type, to, side);
     }
 
     pub fn in_check(&self, side: Side) -> bool {
