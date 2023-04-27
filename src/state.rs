@@ -1,19 +1,22 @@
 pub mod castle_rights;
 pub mod position;
+pub mod zobrist;
 
 use core::fmt;
 
-use self::castle_rights::CastleRights;
+use self::{castle_rights::CastleRights, zobrist::Zobrist};
 use crate::{
     mv::castle::Castle,
     side::{Side, SIDE_MAP},
     square::{self, Square},
 };
 
+#[derive(Clone)]
 pub struct State {
     en_passant: Option<Square>,
     side_to_move: Side,
     castle_rights: CastleRights,
+    zobrist: Zobrist,
     halfmoves: u16,
     fullmoves: u16,
 }
@@ -25,6 +28,7 @@ impl State {
         castle_rights: CastleRights,
         halfmoves: u16,
         fullmoves: u16,
+        zobrist: Zobrist,
     ) -> State {
         State {
             en_passant,
@@ -32,15 +36,23 @@ impl State {
             castle_rights,
             halfmoves,
             fullmoves,
+            zobrist,
         }
     }
 
     pub fn decode_from(&mut self, encoded_state: EncodedState) {
+        self.zobrist.hash_en_passant(self.en_passant);
+        self.zobrist.hash_side(self.side_to_move);
+        self.zobrist.hash_castle_rights_all(self.castle_rights);
+
         self.en_passant = encoded_state.en_passant();
         self.side_to_move = encoded_state.side_to_move();
         self.castle_rights = encoded_state.castle_rights();
         self.halfmoves = encoded_state.halfmoves();
         self.fullmoves = encoded_state.fullmoves();
+
+        self.zobrist.hash_en_passant(self.en_passant);
+        self.zobrist.hash_castle_rights_all(self.castle_rights);
     }
 
     pub fn en_passant(&self) -> Option<Square> {
@@ -63,6 +75,14 @@ impl State {
         self.fullmoves
     }
 
+    pub fn zobrist(&self) -> &Zobrist {
+        &self.zobrist
+    }
+
+    pub fn mut_zobrist(&mut self) -> &mut Zobrist {
+        &mut self.zobrist
+    }
+
     pub fn encode(&self) -> EncodedState {
         EncodedState::new(self)
     }
@@ -82,14 +102,25 @@ impl State {
 
     pub fn set_en_passant(&mut self, en_passant_sq: Square) {
         self.en_passant = Some(en_passant_sq);
+        self.zobrist.hash_en_passant(Some(en_passant_sq));
+    }
+
+    pub fn remove_en_passant(&mut self) {
+        self.zobrist.hash_en_passant(self.en_passant);
+        self.en_passant = None;
     }
 
     pub fn remove_castle_rights(&mut self, side: Side, castle: Castle) {
         self.castle_rights = self.castle_rights.remove_rights(side, castle);
+        self.zobrist.hash_castle_rights_single(side, castle);
     }
 
     pub fn remove_castle_rights_for_color(&mut self, side: Side) {
         self.castle_rights = self.castle_rights.remove_rights_for_color(side);
+        self.zobrist
+            .hash_castle_rights_single(side, Castle::Kingside);
+        self.zobrist
+            .hash_castle_rights_single(side, Castle::Queenside);
     }
 
     pub fn reset_halfmoves(&mut self) {
@@ -106,6 +137,7 @@ impl State {
 
     pub fn update_side_to_move(&mut self) {
         self.side_to_move = self.side_to_move.opposite();
+        self.zobrist.hash_side(self.side_to_move);
     }
 }
 
@@ -114,15 +146,16 @@ impl fmt::Display for State {
         write!(
             f,
             "side to move: {}\ncastling rights: {}\nen-passant: {}\nhalfmoves: {}\nfullmoves: {}",
-            self.side_to_move.to_string(),
-            self.castle_rights.to_string(),
+            self.side_to_move,
+            self.castle_rights,
             self.en_passant.map_or("-".to_string(), |s| s.to_string()),
-            self.halfmoves.to_string(),
-            self.fullmoves.to_string()
+            self.halfmoves,
+            self.fullmoves
         )
     }
 }
 
+#[derive(Clone, Copy)]
 pub struct EncodedState(u32);
 
 impl EncodedState {
@@ -170,7 +203,14 @@ pub mod test_display {
 
     #[test]
     pub fn no1() {
-        let state = State::new(Some(E4), Side::White, castle_rights::WHITE, 0, 0);
+        let state = State::new(
+            Some(E4),
+            Side::White,
+            castle_rights::WHITE,
+            0,
+            0,
+            Zobrist(0),
+        );
         let expected = unindent::unindent(
             "
                                   side to move: white
@@ -192,7 +232,14 @@ pub mod test_encoded_state {
 
     #[test]
     pub fn no1() {
-        let mut state = State::new(Some(E4), Side::White, castle_rights::WHITE, 0, 0);
+        let mut state = State::new(
+            Some(E4),
+            Side::White,
+            castle_rights::WHITE,
+            0,
+            0,
+            Zobrist(0),
+        );
         let encoded_state = EncodedState::new(&state);
         state.decode_from(encoded_state);
         let expected = unindent::unindent(
@@ -211,7 +258,7 @@ pub mod test_encoded_state {
 
     #[test]
     pub fn no_en_passant() {
-        let mut state = State::new(None, Side::White, castle_rights::WHITE, 0, 0);
+        let mut state = State::new(None, Side::White, castle_rights::WHITE, 0, 0, Zobrist(0));
         let encoded_state = EncodedState::new(&state);
         state.decode_from(encoded_state);
         let expected = unindent::unindent(
@@ -226,5 +273,32 @@ pub mod test_encoded_state {
         println!("{}", state.to_string());
 
         assert_eq!(state.to_string(), expected);
+    }
+}
+
+#[cfg(test)]
+pub mod test_zobrist_state {
+    use super::*;
+
+    #[test]
+    fn castle_rights_decode() {
+        let mut zobrist = Zobrist(0);
+        zobrist.hash_castle_rights_all(castle_rights::ALL);
+        let expected = zobrist.clone();
+        println!("expected: {}", expected);
+
+        let mut state = State::new(None, Side::White, castle_rights::ALL, 0, 0, zobrist);
+        assert_eq!(state.zobrist, expected);
+
+        let encoded_state = state.encode();
+
+        state.remove_castle_rights_for_color(Side::White);
+        let mut only_b_castle_rights_zobrist = Zobrist(0);
+        only_b_castle_rights_zobrist.hash_castle_rights_all(castle_rights::BLACK);
+        assert_eq!(state.zobrist, only_b_castle_rights_zobrist);
+
+        state.decode_from(encoded_state);
+
+        assert_eq!(expected, state.zobrist);
     }
 }

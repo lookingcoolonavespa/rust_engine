@@ -2,10 +2,10 @@ use std::fmt;
 
 use crate::{bitboard::BB, side::Side, square::*};
 
-#[derive(Clone, Copy, Debug)]
+#[derive(PartialEq, Clone, Copy, Debug)]
 pub enum Castle {
-    QueenSide = 0,
-    KingSide = 1,
+    Queenside = 0,
+    Kingside = 1,
 }
 
 pub const ROOK_START_SQUARES: [(Square, Square); 2] = [(A1, H1), (A8, H8)];
@@ -24,6 +24,7 @@ impl Castle {
     pub fn to_u16(self) -> u16 {
         self as u16
     }
+
     pub fn to_usize(self) -> usize {
         self as usize
     }
@@ -47,8 +48,8 @@ impl Castle {
 impl fmt::Display for Castle {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let str = match self {
-            Castle::QueenSide => "0-0-0",
-            Castle::KingSide => "0-0",
+            Castle::Queenside => "0-0-0",
+            Castle::Kingside => "0-0",
         };
         write!(f, "{}", str)
     }

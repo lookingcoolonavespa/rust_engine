@@ -21,7 +21,7 @@ fn get_w_pawn_captures() -> [BB; 64] {
     square::ALL.map(|sq| {
         let sq_bb = BB::new(sq);
         let next_rank_mask = sq.rank_mask() << 8;
-        if sq.rank() == 0 || sq.rank() == 7 {
+        if sq.rank() == 7 {
             bitboard::EMPTY
         } else {
             (sq_bb << 9 | sq_bb << 7) & next_rank_mask
@@ -34,7 +34,7 @@ fn get_b_pawn_captures() -> [BB; 64] {
     square::ALL.map(|sq| {
         let sq_bb = BB::new(sq);
         let next_rank_mask = sq.rank_mask() >> 8;
-        if sq.rank() == 0 || sq.rank() == 7 {
+        if sq.rank() == 0 {
             bitboard::EMPTY
         } else {
             (sq_bb >> 9 | sq_bb >> 7) & next_rank_mask

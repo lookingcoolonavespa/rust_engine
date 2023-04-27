@@ -12,7 +12,7 @@ pub struct LegalCheckPreprocessing {
     pinned: BB,
     // the bb representing the squares attacked with the king removed
     // the king is removed to ensure the the danger squares are accurate
-    attacked_squares_with_king_gone_bb: BB,
+    controlled_squares_with_king_gone_bb: BB,
 }
 
 impl LegalCheckPreprocessing {
@@ -20,13 +20,13 @@ impl LegalCheckPreprocessing {
         checkers: BB,
         pinners: BB,
         pinned: BB,
-        attacked_squares_with_king_gone_bb: BB,
+        controlled_squares_with_king_gone_bb: BB,
     ) -> LegalCheckPreprocessing {
         LegalCheckPreprocessing {
             checkers,
             pinners,
             pinned,
-            attacked_squares_with_king_gone_bb,
+            controlled_squares_with_king_gone_bb,
         }
     }
     pub fn pinners(&self) -> BB {
@@ -41,8 +41,8 @@ impl LegalCheckPreprocessing {
         self.checkers
     }
 
-    pub fn attacked_squares_with_king_gone_bb(&self) -> BB {
-        self.attacked_squares_with_king_gone_bb
+    pub fn controlled_squares_with_king_gone_bb(&self) -> BB {
+        self.controlled_squares_with_king_gone_bb
     }
 
     pub fn num_of_checkers(&self) -> u32 {
@@ -81,7 +81,7 @@ pub fn is_legal_king_move(
     legal_check_preprocessing: &LegalCheckPreprocessing,
 ) -> bool {
     let (_, to_sq) = mv.decode_into_squares();
-    let attacked_squares_bb = legal_check_preprocessing.attacked_squares_with_king_gone_bb();
+    let attacked_squares_bb = legal_check_preprocessing.controlled_squares_with_king_gone_bb();
     !attacked_squares_bb.is_set(to_sq)
 }
 
@@ -130,6 +130,7 @@ pub fn is_legal_castle(
     attacked_squares_bb: BB,
     checkers: BB,
 ) -> bool {
+    // assumes castle rights are set and king and rook are on home squares
     if checkers.not_empty() {
         return false;
     }
@@ -289,7 +290,9 @@ pub mod test_is_pinned_move_legal {
 pub mod test_is_legal_regular_or_capture_move {
     use crate::{
         game::Game,
-        move_gen::{attacks, attacks_with_king_gone, checkers_pinners_pinned},
+        move_gen::{
+            checkers_pinners_pinned, controlled_squares, controlled_squares_with_king_gone,
+        },
         mv::EncodedMove,
         piece_type::PieceType,
     };
@@ -308,12 +311,12 @@ pub mod test_is_legal_regular_or_capture_move {
         let side = Side::White;
 
         let (checkers, pinners, pinned) = checkers_pinners_pinned(position, side.opposite());
-        let attacked_squares_bb = attacks(position, side.opposite());
+        let attacked_squares_bb = controlled_squares(position, side.opposite());
         let legal_check_preprocessing = LegalCheckPreprocessing {
             checkers,
             pinners,
             pinned,
-            attacked_squares_with_king_gone_bb: attacked_squares_bb,
+            controlled_squares_with_king_gone_bb: attacked_squares_bb,
         };
 
         let legal_mv = EncodedMove::new(E2, H5, PieceType::Queen, true);
@@ -339,12 +342,12 @@ pub mod test_is_legal_regular_or_capture_move {
         let side = Side::White;
 
         let (checkers, pinners, pinned) = checkers_pinners_pinned(position, side.opposite());
-        let attacked_squares_bb = attacks(position, side.opposite());
+        let attacked_squares_bb = controlled_squares(position, side.opposite());
         let legal_check_preprocessing = LegalCheckPreprocessing {
             checkers,
             pinners,
             pinned,
-            attacked_squares_with_king_gone_bb: attacked_squares_bb,
+            controlled_squares_with_king_gone_bb: attacked_squares_bb,
         };
 
         let legal_mv = EncodedMove::new(D2, E2, PieceType::Queen, false);
@@ -370,12 +373,12 @@ pub mod test_is_legal_regular_or_capture_move {
         let side = Side::White;
 
         let (checkers, pinners, pinned) = checkers_pinners_pinned(position, side.opposite());
-        let attacked_squares_bb = attacks_with_king_gone(position, side.opposite());
+        let attacked_squares_bb = controlled_squares_with_king_gone(position, side.opposite());
         let legal_check_preprocessing = LegalCheckPreprocessing {
             checkers,
             pinners,
             pinned,
-            attacked_squares_with_king_gone_bb: attacked_squares_bb,
+            controlled_squares_with_king_gone_bb: attacked_squares_bb,
         };
 
         let legal_mv = EncodedMove::new(D1, E1, PieceType::King, false);
@@ -395,7 +398,7 @@ pub mod test_is_legal_regular_or_capture_move {
 pub mod test_is_legal_king_mv {
     use crate::{
         game::Game,
-        move_gen::{attacks_with_king_gone, checkers_pinners_pinned},
+        move_gen::{checkers_pinners_pinned, controlled_squares_with_king_gone},
         mv::EncodedMove,
         square::*,
     };
@@ -414,16 +417,119 @@ pub mod test_is_legal_king_mv {
         let mv = EncodedMove::new(from, to, crate::piece_type::PieceType::King, false);
         let attack_side = game.state().side_to_move().opposite();
         let position = game.mut_position();
-        let attacked_squares_with_king_gone_bb = attacks_with_king_gone(position, attack_side);
+        let attacked_squares_with_king_gone_bb =
+            controlled_squares_with_king_gone(position, attack_side);
         let (checkers, pinners, pinned) = checkers_pinners_pinned(game.position(), attack_side);
         let legal_check_preprocessing = LegalCheckPreprocessing {
             checkers,
             pinners,
             pinned,
-            attacked_squares_with_king_gone_bb,
+            controlled_squares_with_king_gone_bb: attacked_squares_with_king_gone_bb,
         };
 
         assert!(!is_legal_king_move(mv, &legal_check_preprocessing));
+    }
+
+    #[test]
+    fn king_cant_capture_defended_piece_1() {
+        let fen = "4k3/8/8/8/8/6p1/5p2/4K3 w - - 0 1";
+        let result = Game::from_fen(fen);
+        assert!(result.is_ok());
+
+        let mut game = result.unwrap();
+        let from = E2;
+        let to = F2;
+        let mv = EncodedMove::new(from, to, crate::piece_type::PieceType::King, false);
+        let attack_side = game.state().side_to_move().opposite();
+        let position = game.mut_position();
+        let attacked_squares_with_king_gone_bb =
+            controlled_squares_with_king_gone(position, attack_side);
+        let (checkers, pinners, pinned) = checkers_pinners_pinned(game.position(), attack_side);
+        let legal_check_preprocessing = LegalCheckPreprocessing {
+            checkers,
+            pinners,
+            pinned,
+            controlled_squares_with_king_gone_bb: attacked_squares_with_king_gone_bb,
+        };
+
+        assert!(!is_legal_king_move(mv, &legal_check_preprocessing));
+    }
+
+    #[test]
+    fn king_cant_capture_defended_piece_2() {
+        let fen = "n1n5/PPP5/3k4/3b4/3K4/8/5p1p/5N2 b - - 0 1";
+        let result = Game::from_fen(fen);
+        assert!(result.is_ok());
+
+        let mut game = result.unwrap();
+        let from = D4;
+        let to = D5;
+        let mv = EncodedMove::new(from, to, crate::piece_type::PieceType::King, false);
+        let attack_side = game.state().side_to_move().opposite();
+        let position = game.mut_position();
+        let attacked_squares_with_king_gone_bb =
+            controlled_squares_with_king_gone(position, attack_side);
+        let (checkers, pinners, pinned) = checkers_pinners_pinned(game.position(), attack_side);
+        let legal_check_preprocessing = LegalCheckPreprocessing {
+            checkers,
+            pinners,
+            pinned,
+            controlled_squares_with_king_gone_bb: attacked_squares_with_king_gone_bb,
+        };
+
+        assert!(!is_legal_king_move(mv, &legal_check_preprocessing));
+    }
+
+    #[test]
+    fn test_1() {
+        let fen = "rn1qkbnr/p1pppppp/b7/1p6/5P2/P7/1PPPP1PP/RNBQKBNR w KQkq - 0 1";
+        let result = Game::from_fen(fen);
+        assert!(result.is_ok());
+
+        let mut game = result.unwrap();
+        let from = E1;
+        let to = F2;
+        let mv = EncodedMove::new(from, to, crate::piece_type::PieceType::King, false);
+        let attack_side = game.state().side_to_move().opposite();
+        let position = game.mut_position();
+        let attacked_squares_with_king_gone_bb =
+            controlled_squares_with_king_gone(position, attack_side);
+        let (checkers, pinners, pinned) = checkers_pinners_pinned(game.position(), attack_side);
+        let legal_check_preprocessing = LegalCheckPreprocessing {
+            checkers,
+            pinners,
+            pinned,
+            controlled_squares_with_king_gone_bb: attacked_squares_with_king_gone_bb,
+        };
+
+        assert!(is_legal_king_move(mv, &legal_check_preprocessing));
+    }
+
+    #[test]
+    fn test_2() {
+        let fen = "rnbqk1nr/pppppp1p/7b/6p1/P3P3/8/1PPP1PPP/RNBQKBNR w KQkq - 0 1";
+        let result = Game::from_fen(fen);
+        assert!(result.is_ok());
+
+        let mut game = result.unwrap();
+        let from = E1;
+        let to = E2;
+        let mv = EncodedMove::new(from, to, crate::piece_type::PieceType::King, false);
+        let attack_side = game.state().side_to_move().opposite();
+        let position = game.mut_position();
+        let attacked_squares_with_king_gone_bb =
+            controlled_squares_with_king_gone(position, attack_side);
+        let (checkers, pinners, pinned) = checkers_pinners_pinned(game.position(), attack_side);
+        let legal_check_preprocessing = LegalCheckPreprocessing {
+            checkers,
+            pinners,
+            pinned,
+            controlled_squares_with_king_gone_bb: attacked_squares_with_king_gone_bb,
+        };
+
+        println!("{}", attacked_squares_with_king_gone_bb);
+
+        assert!(is_legal_king_move(mv, &legal_check_preprocessing));
     }
 }
 
@@ -433,7 +539,7 @@ pub mod test_is_legal_castle {
     use crate::bitboard;
     use crate::fen::STARTING_POSITION_FEN;
     use crate::game::Game;
-    use crate::move_gen::attacks;
+    use crate::move_gen::controlled_squares;
     use crate::mv::castle::Castle;
 
     #[test]
@@ -442,11 +548,11 @@ pub mod test_is_legal_castle {
         let result = Game::from_fen(fen);
         assert!(result.is_ok());
         let game = result.unwrap();
-        let attacked_squares_bb = attacks(game.position(), Side::Black);
+        let attacked_squares_bb = controlled_squares(game.position(), Side::Black);
         assert_eq!(
             is_legal_castle(
                 game.position(),
-                Castle::QueenSide,
+                Castle::Queenside,
                 Side::White,
                 attacked_squares_bb,
                 bitboard::EMPTY
@@ -456,7 +562,7 @@ pub mod test_is_legal_castle {
         assert_eq!(
             is_legal_castle(
                 game.position(),
-                Castle::KingSide,
+                Castle::Kingside,
                 Side::White,
                 attacked_squares_bb,
                 bitboard::EMPTY
@@ -471,12 +577,12 @@ pub mod test_is_legal_castle {
         let result = Game::from_fen(fen);
         assert!(result.is_ok());
         let game = result.unwrap();
-        let attacked_squares_bb_b = attacks(game.position(), Side::Black);
-        let attacked_squares_bb_w = attacks(game.position(), Side::White);
+        let attacked_squares_bb_b = controlled_squares(game.position(), Side::Black);
+        let attacked_squares_bb_w = controlled_squares(game.position(), Side::White);
         assert_eq!(
             is_legal_castle(
                 game.position(),
-                Castle::QueenSide,
+                Castle::Queenside,
                 Side::Black,
                 attacked_squares_bb_w,
                 bitboard::EMPTY
@@ -486,7 +592,7 @@ pub mod test_is_legal_castle {
         assert_eq!(
             is_legal_castle(
                 game.position(),
-                Castle::KingSide,
+                Castle::Kingside,
                 Side::Black,
                 attacked_squares_bb_w,
                 bitboard::EMPTY
@@ -496,7 +602,7 @@ pub mod test_is_legal_castle {
         assert_eq!(
             is_legal_castle(
                 game.position(),
-                Castle::QueenSide,
+                Castle::Queenside,
                 Side::White,
                 attacked_squares_bb_b,
                 bitboard::EMPTY
@@ -506,7 +612,7 @@ pub mod test_is_legal_castle {
         assert_eq!(
             is_legal_castle(
                 game.position(),
-                Castle::KingSide,
+                Castle::Kingside,
                 Side::White,
                 attacked_squares_bb_b,
                 bitboard::EMPTY
@@ -521,12 +627,12 @@ pub mod test_is_legal_castle {
         let result = Game::from_fen(fen);
         assert!(result.is_ok());
         let game = result.unwrap();
-        let attacked_squares_bb_b = attacks(game.position(), Side::Black);
-        let attacked_squares_bb_w = attacks(game.position(), Side::White);
+        let attacked_squares_bb_b = controlled_squares(game.position(), Side::Black);
+        let attacked_squares_bb_w = controlled_squares(game.position(), Side::White);
         assert_eq!(
             is_legal_castle(
                 game.position(),
-                Castle::QueenSide,
+                Castle::Queenside,
                 Side::Black,
                 attacked_squares_bb_w,
                 bitboard::EMPTY
@@ -536,7 +642,7 @@ pub mod test_is_legal_castle {
         assert_eq!(
             is_legal_castle(
                 game.position(),
-                Castle::KingSide,
+                Castle::Kingside,
                 Side::Black,
                 attacked_squares_bb_w,
                 bitboard::EMPTY
@@ -546,7 +652,7 @@ pub mod test_is_legal_castle {
         assert_eq!(
             is_legal_castle(
                 game.position(),
-                Castle::QueenSide,
+                Castle::Queenside,
                 Side::White,
                 attacked_squares_bb_b,
                 bitboard::EMPTY
@@ -556,7 +662,7 @@ pub mod test_is_legal_castle {
         assert_eq!(
             is_legal_castle(
                 game.position(),
-                Castle::KingSide,
+                Castle::Kingside,
                 Side::White,
                 attacked_squares_bb_b,
                 bitboard::EMPTY
@@ -571,12 +677,12 @@ pub mod test_is_legal_castle {
         let result = Game::from_fen(fen);
         assert!(result.is_ok());
         let game = result.unwrap();
-        let attacked_squares_bb_b = attacks(game.position(), Side::Black);
-        let attacked_squares_bb_w = attacks(game.position(), Side::White);
+        let attacked_squares_bb_b = controlled_squares(game.position(), Side::Black);
+        let attacked_squares_bb_w = controlled_squares(game.position(), Side::White);
         assert_eq!(
             is_legal_castle(
                 game.position(),
-                Castle::QueenSide,
+                Castle::Queenside,
                 Side::Black,
                 attacked_squares_bb_w,
                 bitboard::EMPTY
@@ -586,7 +692,7 @@ pub mod test_is_legal_castle {
         assert_eq!(
             is_legal_castle(
                 game.position(),
-                Castle::KingSide,
+                Castle::Kingside,
                 Side::Black,
                 attacked_squares_bb_w,
                 bitboard::EMPTY
@@ -596,7 +702,7 @@ pub mod test_is_legal_castle {
         assert_eq!(
             is_legal_castle(
                 game.position(),
-                Castle::QueenSide,
+                Castle::Queenside,
                 Side::White,
                 attacked_squares_bb_b,
                 bitboard::EMPTY
@@ -606,7 +712,7 @@ pub mod test_is_legal_castle {
         assert_eq!(
             is_legal_castle(
                 game.position(),
-                Castle::KingSide,
+                Castle::Kingside,
                 Side::White,
                 attacked_squares_bb_b,
                 bitboard::EMPTY
@@ -621,11 +727,11 @@ pub mod test_is_legal_castle {
         let result = Game::from_fen(fen);
         assert!(result.is_ok());
         let game = result.unwrap();
-        let attacked_squares_bb = attacks(game.position(), Side::Black);
+        let attacked_squares_bb = controlled_squares(game.position(), Side::Black);
         assert_eq!(
             is_legal_castle(
                 game.position(),
-                Castle::QueenSide,
+                Castle::Queenside,
                 Side::White,
                 attacked_squares_bb,
                 bitboard::EMPTY
@@ -635,7 +741,7 @@ pub mod test_is_legal_castle {
         assert_eq!(
             is_legal_castle(
                 game.position(),
-                Castle::KingSide,
+                Castle::Kingside,
                 Side::White,
                 attacked_squares_bb,
                 bitboard::EMPTY
@@ -650,11 +756,11 @@ pub mod test_is_legal_castle {
         let result = Game::from_fen(fen);
         assert!(result.is_ok());
         let game = result.unwrap();
-        let attacked_squares_bb = attacks(game.position(), Side::Black);
+        let attacked_squares_bb = controlled_squares(game.position(), Side::Black);
         assert_eq!(
             is_legal_castle(
                 game.position(),
-                Castle::QueenSide,
+                Castle::Queenside,
                 Side::White,
                 attacked_squares_bb,
                 bitboard::EMPTY
@@ -664,7 +770,7 @@ pub mod test_is_legal_castle {
         assert_eq!(
             is_legal_castle(
                 game.position(),
-                Castle::KingSide,
+                Castle::Kingside,
                 Side::White,
                 attacked_squares_bb,
                 bitboard::EMPTY
@@ -679,11 +785,11 @@ pub mod test_is_legal_castle {
         let result = Game::from_fen(fen);
         assert!(result.is_ok());
         let game = result.unwrap();
-        let attacked_squares_bb = attacks(game.position(), Side::Black);
+        let attacked_squares_bb = controlled_squares(game.position(), Side::Black);
         assert_eq!(
             is_legal_castle(
                 game.position(),
-                Castle::QueenSide,
+                Castle::Queenside,
                 Side::White,
                 attacked_squares_bb,
                 bitboard::EMPTY
@@ -693,7 +799,7 @@ pub mod test_is_legal_castle {
         assert_eq!(
             is_legal_castle(
                 game.position(),
-                Castle::KingSide,
+                Castle::Kingside,
                 Side::White,
                 attacked_squares_bb,
                 bitboard::EMPTY

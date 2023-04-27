@@ -3,6 +3,9 @@ name = "rust_engine"
 version = "0.1.0"
 edition = "2021"
 
+[profile.release]
+lto = true
+
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
@@ -10,4 +13,4 @@ subenum = "1.0.1"
 
 [dev-dependencies]
 unindent = "0.2.1"
-
+rand = "0.8.5"

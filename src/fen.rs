@@ -2,19 +2,23 @@ use std::collections::HashMap;
 
 use crate::{
     bitboard::{self, BB},
+    mv::castle::Castle,
     piece::Piece,
     piece_type::PieceType,
     side::Side,
     square::{self, Square},
-    state::castle_rights::{self, CastleRights},
     state::position::Position,
     state::State,
+    state::{
+        castle_rights::{self, CastleRights},
+        zobrist::Zobrist,
+    },
 };
 
 pub const STARTING_POSITION_FEN: &str = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 
 pub fn load_fen(fen: &str) -> Result<(Position, State), String> {
-    let mut fen_state = fen.split(" ");
+    let mut fen_state = fen.split(' ');
 
     let fen_board = fen_state.next().ok_or("fen string is empty")?;
     let (bb_sides, bb_pieces, board) = parse_fen_board(fen_board)?;
@@ -42,14 +46,17 @@ pub fn load_fen(fen: &str) -> Result<(Position, State), String> {
         Ok(num) => num,
         Err(_) => return Err("fullmoves is not a number".to_string()),
     };
+
+    let position = Position::new(bb_sides, bb_pieces, board);
     Ok((
-        Position::new(bb_sides, bb_pieces, board),
+        position,
         State::new(
             en_passant,
             *side_to_move,
             castle_rights,
-            halfmoves as u16,
-            fullmoves as u16,
+            halfmoves,
+            fullmoves,
+            Zobrist::new(&position, castle_rights, en_passant, *side_to_move),
         ),
     ))
 }
@@ -87,7 +94,7 @@ fn parse_fen_board(fen_board: &str) -> Result<([BB; 2], [BB; 6], [Option<Piece>;
             .ok_or("invalid character in fen board")?;
         let piece_type: PieceType = PieceType::try_from(piece_lowercase)?;
 
-        if rank > 7 || rank < 0 || file > 7 || rank < 0 {
+        if !(0..=7).contains(&rank) {
             return Err("fen board contains too many files or ranks".to_string());
         }
 
@@ -119,13 +126,13 @@ fn parse_fen_castle(fen_castle: &str) -> Result<CastleRights, String> {
     let mut castle_rights = castle_rights::NONE;
     for c in fen_castle.chars() {
         if c == 'K' {
-            castle_rights = castle_rights.set(castle_rights::KINGSIDE & castle_rights::WHITE);
+            castle_rights = castle_rights.set(Side::White, Castle::Kingside);
         } else if c == 'Q' {
-            castle_rights = castle_rights.set(castle_rights::QUEENSIDE & castle_rights::WHITE);
+            castle_rights = castle_rights.set(Side::White, Castle::Queenside);
         } else if c == 'k' {
-            castle_rights = castle_rights.set(castle_rights::KINGSIDE & castle_rights::BLACK);
+            castle_rights = castle_rights.set(Side::Black, Castle::Kingside);
         } else if c == 'q' {
-            castle_rights = castle_rights.set(castle_rights::QUEENSIDE & castle_rights::BLACK);
+            castle_rights = castle_rights.set(Side::Black, Castle::Queenside);
         } else {
             return Err("invalid character in castle rights".to_string());
         }
@@ -140,11 +147,15 @@ fn parse_fen_en_passant(fen_en_passant: &str) -> Result<Option<Square>, String> 
     }
 
     if fen_en_passant.len() != 2 {
-        return Err("invalid en passant square".to_string());
+        return Err(format!(
+            "{} is an invalid en passant square",
+            fen_en_passant
+        ));
     }
 
-    let file_char: char = fen_en_passant.chars().nth(0).unwrap();
-    let rank_char: char = fen_en_passant.chars().nth(1).unwrap();
+    let mut chars = fen_en_passant.chars();
+    let file_char: char = chars.next().unwrap();
+    let rank_char: char = chars.next().unwrap();
 
     if !square::RANKS.contains(&rank_char) {
         return Err("invalid en passant square".to_string());
@@ -159,6 +170,3 @@ fn parse_fen_en_passant(fen_en_passant: &str) -> Result<Option<Square>, String> 
 
     Ok(Some(en_passant_sq))
 }
-
-#[cfg(test)]
-pub mod fen_test {}

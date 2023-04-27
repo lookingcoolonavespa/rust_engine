@@ -19,6 +19,10 @@ impl BB {
         BB(1u64 << sq.0)
     }
 
+    pub fn to_usize(self) -> usize {
+        self.0.trailing_zeros() as usize
+    }
+
     pub fn lsb(self) -> BB {
         BB(self.0 & (0u64.wrapping_sub(self.0)))
     }
@@ -674,14 +678,14 @@ const B_PAWN_PUSHES: [BB; 64] = [
 pub const PAWN_PUSHES: [[BB; 64]; 2] = [W_PAWN_PUSHES, B_PAWN_PUSHES];
 
 const W_PAWN_CAPTURES: [BB; 64] = [
-    BB(0),
-    BB(0),
-    BB(0),
-    BB(0),
-    BB(0),
-    BB(0),
-    BB(0),
-    BB(0),
+    BB(512),
+    BB(1280),
+    BB(2560),
+    BB(5120),
+    BB(10240),
+    BB(20480),
+    BB(40960),
+    BB(16384),
     BB(131072),
     BB(327680),
     BB(655360),
@@ -797,14 +801,14 @@ const B_PAWN_CAPTURES: [BB; 64] = [
     BB(87960930222080),
     BB(175921860444160),
     BB(70368744177664),
-    BB(0),
-    BB(0),
-    BB(0),
-    BB(0),
-    BB(0),
-    BB(0),
-    BB(0),
-    BB(0),
+    BB(562949953421312),
+    BB(1407374883553280),
+    BB(2814749767106560),
+    BB(5629499534213120),
+    BB(11258999068426240),
+    BB(22517998136852480),
+    BB(45035996273704960),
+    BB(18014398509481984),
 ];
 
 pub const PAWN_CAPTURES: [[BB; 64]; 2] = [W_PAWN_CAPTURES, B_PAWN_CAPTURES];

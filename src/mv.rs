@@ -15,7 +15,7 @@ pub trait Decode {
     fn decode_into_bb(&self) -> (BB, BB);
 }
 
-#[derive(Clone, Copy)]
+#[derive(PartialEq, Debug, Clone, Copy)]
 pub enum Move {
     King(EncodedMove),
     Rook(EncodedMove),
@@ -51,16 +51,16 @@ impl fmt::Display for Move {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(PartialEq, Clone, Copy, Debug)]
 pub struct EncodedMove(u16);
 
 impl EncodedMove {
     pub fn new(from: Square, to: Square, piece_type: PieceType, capture: bool) -> EncodedMove {
         EncodedMove(
-            ((if capture { 1u16 } else { 0u16 }) << 15
+            (if capture { 1u16 } else { 0u16 }) << 15
                 | piece_type.to_u16() << 12
                 | to.to_u16() << 6
-                | from.to_u16()) as u16,
+                | from.to_u16(),
         )
     }
 
@@ -92,7 +92,7 @@ impl fmt::Display for EncodedMove {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(PartialEq, Clone, Copy, Debug)]
 pub struct PromotionMove(u16);
 
 impl PromotionMove {
@@ -103,10 +103,10 @@ impl PromotionMove {
         capture: bool,
     ) -> PromotionMove {
         PromotionMove(
-            ((if capture { 1 } else { 0 }) << 15
+            (if capture { 1 } else { 0 }) << 15
                 | promote_piece_type.to_u16() << 12
                 | to.to_u16() << 6
-                | from.to_u16()) as u16,
+                | from.to_u16(),
         )
     }
 

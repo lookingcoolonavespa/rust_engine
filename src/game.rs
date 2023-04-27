@@ -15,9 +15,10 @@ use crate::{
     side::Side,
     square,
     state::position::Position,
-    state::{castle_rights, EncodedState, State},
+    state::{EncodedState, State},
 };
 
+#[derive(Clone)]
 pub struct Game {
     position: Position,
     state: State,
@@ -25,7 +26,7 @@ pub struct Game {
 
 impl Game {
     pub fn from_fen(fen: &str) -> Result<Game, String> {
-        let (position, state) = fen::load_fen(&fen)?;
+        let (position, state) = fen::load_fen(fen)?;
 
         Ok(Game { position, state })
     }
@@ -88,7 +89,7 @@ impl Game {
                                     )))
                                 }
                             } else if is_double_pawn_push(from, to, side) {
-                                mv_list.push_move(Move::Pawn(EncodedMove::new(
+                                mv_list.push_move(Move::DoublePawnPush(EncodedMove::new(
                                     from,
                                     to,
                                     PieceType::Pawn,
@@ -168,11 +169,11 @@ impl Game {
                         });
 
                         let castle_rights = self.state().castle_rights();
-                        if castle_rights.can(side, castle_rights::QUEENSIDE) {
-                            mv_list.push_move(Move::Castle(Castle::QueenSide))
+                        if castle_rights.can(side, Castle::Queenside) {
+                            mv_list.push_move(Move::Castle(Castle::Queenside))
                         }
-                        if castle_rights.can(side, castle_rights::KINGSIDE) {
-                            mv_list.push_move(Move::Castle(Castle::KingSide))
+                        if castle_rights.can(side, Castle::Kingside) {
+                            mv_list.push_move(Move::Castle(Castle::Kingside))
                         }
                     }
                 }
@@ -182,22 +183,33 @@ impl Game {
         mv_list
     }
 
-    fn make_en_passant_move(&mut self, mv: EncodedMove) -> Option<Piece> {
-        let side = self.state.side_to_move();
+    fn make_en_passant_move(&mut self, mv: EncodedMove, side: Side) -> Option<Piece> {
         let (from, to) = mv.decode_into_squares();
 
-        self.position.move_piece(PieceType::Pawn, from, to, side);
         let en_passant_capture_sq = self
             .state
             .en_passant_capture_sq()
             .expect("made en passant capture when there was no en passant square");
         let capture = self.position.remove_at(en_passant_capture_sq);
+        self.state.mut_zobrist().hash_piece(
+            side.opposite(),
+            PieceType::Pawn,
+            en_passant_capture_sq,
+        );
+
+        self.position.move_piece(PieceType::Pawn, from, to, side);
+
+        self.state
+            .mut_zobrist()
+            .hash_piece(side, PieceType::Pawn, from);
+        self.state
+            .mut_zobrist()
+            .hash_piece(side, PieceType::Pawn, to);
 
         capture
     }
 
-    fn unmake_en_passant_move(&mut self, mv: EncodedMove, captured_side: Side) {
-        let side = self.state.side_to_move();
+    fn unmake_en_passant_move(&mut self, mv: EncodedMove, side: Side) {
         let (from, to) = mv.decode_into_squares();
 
         self.position.move_piece(PieceType::Pawn, to, from, side);
@@ -207,14 +219,14 @@ impl Game {
             .en_passant_capture_sq()
             .expect("unwrapped en passant square when there was no en passant square");
         self.position
-            .place_piece(PieceType::Pawn, en_passant_capture_sq, captured_side);
+            .place_piece(PieceType::Pawn, en_passant_capture_sq, side.opposite());
     }
 
     pub fn is_legal_en_passant_move(&mut self, mv: EncodedMove) -> bool {
         let side = self.state.side_to_move();
-        self.make_en_passant_move(mv);
+        self.make_en_passant_move(mv, side);
         let check = self.position.in_check(side);
-        self.unmake_en_passant_move(mv, side.opposite());
+        self.unmake_en_passant_move(mv, side);
 
         !check
     }
@@ -234,20 +246,20 @@ impl Game {
                 &self.position,
                 piece_mv,
                 self.state.side_to_move(),
-                &legal_check_preprocessing,
+                legal_check_preprocessing,
             ),
             Move::Promotion(promotion_mv) => is_legal_regular_move(
                 &self.position,
                 promotion_mv,
                 self.state.side_to_move(),
-                &legal_check_preprocessing,
+                legal_check_preprocessing,
             ),
             Move::EnPassant(en_passant_mv) => self.is_legal_en_passant_move(en_passant_mv),
             Move::Castle(castle) => is_legal_castle(
                 &self.position,
                 castle,
                 self.state.side_to_move(),
-                legal_check_preprocessing.attacked_squares_with_king_gone_bb(),
+                legal_check_preprocessing.controlled_squares_with_king_gone_bb(),
                 legal_check_preprocessing.checkers(),
             ),
         }
@@ -260,8 +272,14 @@ impl Game {
         let mut capture = None;
         if mv.is_capture() {
             capture = self.position.remove_at(to);
+            let capture_pc = capture.expect("captured a piece, but could not unwrap the result");
+            self.state
+                .mut_zobrist()
+                .hash_piece(capture_pc.side(), capture_pc.piece_type(), to);
         }
         self.position.move_piece(piece_type, from, to, side);
+        self.state.mut_zobrist().hash_piece(side, piece_type, from);
+        self.state.mut_zobrist().hash_piece(side, piece_type, to);
 
         capture
     }
@@ -269,6 +287,20 @@ impl Game {
     fn make_castle_move(&mut self, castle: Castle, side: Side) {
         let (king_from, king_to) = castle.king_squares(side);
         let (rook_from, rook_to) = castle.rook_squares(side);
+
+        self.state
+            .mut_zobrist()
+            .hash_piece(side, PieceType::King, king_from);
+        self.state
+            .mut_zobrist()
+            .hash_piece(side, PieceType::King, king_to);
+
+        self.state
+            .mut_zobrist()
+            .hash_piece(side, PieceType::Rook, rook_from);
+        self.state
+            .mut_zobrist()
+            .hash_piece(side, PieceType::Rook, rook_to);
 
         self.position
             .move_piece(PieceType::King, king_from, king_to, side);
@@ -282,26 +314,54 @@ impl Game {
         let mut capture = None;
         if mv.is_capture() {
             capture = self.position.remove_at(to);
+            let capture_pc = capture.expect("captured a piece, but could not unwrap the result");
+            self.state
+                .mut_zobrist()
+                .hash_piece(capture_pc.side(), capture_pc.piece_type(), to);
         }
+
         self.position.remove_piece(PieceType::Pawn, from, side);
         self.position.place_piece(mv.promote_piece_type(), to, side);
+
+        self.state
+            .mut_zobrist()
+            .hash_piece(side, PieceType::Pawn, from);
+        self.state
+            .mut_zobrist()
+            .hash_piece(side, mv.promote_piece_type(), to);
 
         capture
     }
 
-    pub fn adjust_castle_rights_on_rook_move(&mut self, mv: EncodedMove) {
-        let side = self.state.side_to_move();
-        let (rook_queenside_sq, rook_kingside_sq) = side.rook_start_squares();
-        let (from, _) = mv.decode_into_squares();
-        if from == rook_kingside_sq {
-            self.state.remove_castle_rights(side, Castle::QueenSide);
-        } else if from == rook_queenside_sq {
-            self.state.remove_castle_rights(side, Castle::KingSide);
+    pub fn adjust_castle_rights_on_capture(&mut self, mv: impl Decode, capture: Option<Piece>) {
+        let pc = capture.expect("adjusting castle rights on capture but no piece was given");
+        if pc.piece_type() == PieceType::Rook {
+            self.adjust_castle_rights_on_capturing_rook(mv, pc.side());
         }
     }
 
-    pub fn adjust_castle_rights_on_king_move(&mut self) {
-        let side = self.state.side_to_move();
+    pub fn adjust_castle_rights_on_capturing_rook(&mut self, mv: impl Decode, side: Side) {
+        let (rook_queenside_sq, rook_kingside_sq) = side.rook_start_squares();
+        let (_, to) = mv.decode_into_squares();
+
+        if to == rook_kingside_sq {
+            self.state.remove_castle_rights(side, Castle::Kingside);
+        } else if to == rook_queenside_sq {
+            self.state.remove_castle_rights(side, Castle::Queenside);
+        }
+    }
+
+    pub fn adjust_castle_rights_on_rook_move(&mut self, mv: impl Decode, side: Side) {
+        let (rook_queenside_sq, rook_kingside_sq) = side.rook_start_squares();
+        let (from, _) = mv.decode_into_squares();
+        if from == rook_kingside_sq {
+            self.state.remove_castle_rights(side, Castle::Kingside);
+        } else if from == rook_queenside_sq {
+            self.state.remove_castle_rights(side, Castle::Queenside);
+        }
+    }
+
+    pub fn adjust_castle_rights_on_king_move(&mut self, side: Side) {
         self.state.remove_castle_rights_for_color(side);
     }
 
@@ -317,9 +377,8 @@ impl Game {
         self.state.set_en_passant(new_en_passant_sq);
     }
 
-    pub fn make_move(&mut self, mv: Move) -> (Option<Piece>, EncodedState) {
+    pub fn make_move(&mut self, mv: Move) -> Option<Piece> {
         // assumes move is legal
-        let encoded_state = self.state.encode();
         let side = self.state.side_to_move();
 
         let capture = match mv {
@@ -327,10 +386,11 @@ impl Game {
                 let capture = self.make_regular_move(mv, side);
                 if mv.is_capture() {
                     self.state.reset_halfmoves();
+                    self.adjust_castle_rights_on_capture(mv, capture);
                 } else {
                     self.state.increase_halfmoves();
                 }
-                self.adjust_castle_rights_on_king_move();
+                self.adjust_castle_rights_on_king_move(side);
 
                 capture
             }
@@ -338,10 +398,11 @@ impl Game {
                 let capture = self.make_regular_move(mv, side);
                 if mv.is_capture() {
                     self.state.reset_halfmoves();
+                    self.adjust_castle_rights_on_capture(mv, capture);
                 } else {
                     self.state.increase_halfmoves();
                 }
-                self.adjust_castle_rights_on_rook_move(mv);
+                self.adjust_castle_rights_on_rook_move(mv, side);
 
                 capture
             }
@@ -354,47 +415,58 @@ impl Game {
             }
             Move::Pawn(mv) => {
                 let capture = self.make_regular_move(mv, side);
+                if mv.is_capture() {
+                    self.adjust_castle_rights_on_capture(mv, capture);
+                }
                 self.state.reset_halfmoves();
 
                 capture
             }
             Move::Piece(mv) => {
+                let capture = self.make_regular_move(mv, side);
                 if mv.is_capture() {
                     self.state.reset_halfmoves();
+                    self.adjust_castle_rights_on_capture(mv, capture);
                 } else {
                     self.state.increase_halfmoves();
                 }
-                let capture = self.make_regular_move(mv, side);
 
                 capture
             }
             Move::Castle(castle_mv) => {
                 self.make_castle_move(castle_mv, side);
                 self.state.increase_halfmoves();
-                self.adjust_castle_rights_on_king_move();
+                self.adjust_castle_rights_on_king_move(side);
 
                 None
             }
             Move::Promotion(promotion_mv) => {
                 self.state.reset_halfmoves();
                 let capture = self.make_promotion_move(promotion_mv, side);
+                if promotion_mv.is_capture() {
+                    self.adjust_castle_rights_on_capture(promotion_mv, capture);
+                }
 
                 capture
             }
             Move::EnPassant(en_passant_mv) => {
-                let capture = self.make_en_passant_move(en_passant_mv);
+                let capture = self.make_en_passant_move(en_passant_mv, side);
                 self.state.reset_halfmoves();
 
                 capture
             }
         };
 
+        if !matches!(mv, Move::DoublePawnPush(_)) {
+            self.state.remove_en_passant();
+        }
+
         if self.state.side_to_move() == Side::Black {
             self.state.increase_fullmoves();
         };
         self.state.update_side_to_move();
 
-        (capture, encoded_state)
+        capture
     }
 
     pub fn unmake_regular_move(&mut self, mv: EncodedMove, capture: Option<Piece>, side: Side) {
@@ -402,17 +474,36 @@ impl Game {
         let (from, to) = mv.decode_into_squares();
 
         self.position.move_piece(piece_type, to, from, side);
+        self.state.mut_zobrist().hash_piece(side, piece_type, from);
+        self.state.mut_zobrist().hash_piece(side, piece_type, to);
+
         if mv.is_capture() {
             let (capture_side, capture_pc) = capture
                 .expect("capture is true, but unmake function was not giving a Piece")
                 .decode();
             self.position.place_piece(capture_pc, to, capture_side);
+            self.state
+                .mut_zobrist()
+                .hash_piece(capture_side, capture_pc, to);
         }
     }
 
     fn unmake_castle_move(&mut self, castle: Castle, side: Side) {
         let (king_from, king_to) = castle.king_squares(side);
         let (rook_from, rook_to) = castle.rook_squares(side);
+        self.state
+            .mut_zobrist()
+            .hash_piece(side, PieceType::King, king_from);
+        self.state
+            .mut_zobrist()
+            .hash_piece(side, PieceType::King, king_to);
+
+        self.state
+            .mut_zobrist()
+            .hash_piece(side, PieceType::Rook, rook_from);
+        self.state
+            .mut_zobrist()
+            .hash_piece(side, PieceType::Rook, rook_to);
 
         self.position
             .move_piece(PieceType::King, king_to, king_from, side);
@@ -454,7 +545,7 @@ impl Game {
                 self.unmake_promotion_move(promotion_mv, capture, side);
             }
             Move::EnPassant(en_passant_mv) => {
-                self.unmake_en_passant_move(en_passant_mv, self.state.side_to_move().opposite());
+                self.unmake_en_passant_move(en_passant_mv, side);
             }
         };
     }
@@ -564,7 +655,7 @@ pub mod test_fen {
     }
 
     #[test]
-    fn parse_parse_with_random_fen() {
+    fn parse_with_random_fen() {
         let fen = "8/8/7p/3KNN1k/2p4p/8/3P2p1/8 w - - 0 0";
         let result = Game::from_fen(fen);
         match result {
@@ -586,6 +677,10 @@ pub mod test_fen {
 
                 println!("{}", game.position.to_string());
                 assert_eq!(game.position.to_string(), expected);
+                assert_eq!(
+                    game.state().castle_rights().to_string(),
+                    (castle_rights::NONE).to_string()
+                );
             }
             Err(e) => {
                 println!("{}", &e);
@@ -735,9 +830,8 @@ pub mod test_fen {
         let result = Game::from_fen(fen);
         match result {
             Ok(game) => {
-                let mut expected =
-                    castle_rights::NONE.set(castle_rights::KINGSIDE & castle_rights::WHITE);
-                expected = expected.set(castle_rights::QUEENSIDE & castle_rights::BLACK);
+                let mut expected = castle_rights::NONE.set(Side::White, Castle::Kingside);
+                expected = expected.set(Side::Black, Castle::Queenside);
                 assert_eq!(game.state().castle_rights(), expected);
             }
             Err(e) => {
@@ -766,6 +860,115 @@ pub mod test_fen {
     }
 }
 
+#[cfg(test)]
+pub mod test_pseudo_legal {
+    use std::collections::HashMap;
+
+    use super::*;
+
+    #[test]
+    fn test_1() {
+        let fen = "4k3/7P/8/3Pp3/8/8/P7/R3K2R w KQ e6 0 1";
+        let result = Game::from_fen(fen);
+        assert!(result.is_ok());
+        let game = result.unwrap();
+        let mv_list = game.pseudo_legal_moves(Side::White);
+        let mut mv_counter: HashMap<&str, u32> = HashMap::from([
+            ("king", 0),
+            ("rook", 0),
+            ("pawn", 0),
+            ("double pawn push", 0),
+            ("piece", 0),
+            ("castle", 0),
+            ("promotion", 0),
+            ("en passant", 0),
+        ]);
+
+        for mv in mv_list.iter() {
+            let key_to_update;
+            match mv {
+                Move::King(_) => {
+                    key_to_update = "king";
+                }
+                Move::Rook(_) => {
+                    key_to_update = "rook";
+                }
+                Move::Pawn(_) => {
+                    key_to_update = "pawn";
+                }
+                Move::DoublePawnPush(_) => {
+                    key_to_update = "double pawn push";
+                }
+                Move::Piece(_) => {
+                    key_to_update = "piece";
+                }
+                Move::Castle(_) => {
+                    key_to_update = "castle";
+                }
+                Move::Promotion(_) => {
+                    key_to_update = "promotion";
+                }
+                Move::EnPassant(_) => key_to_update = "en passant",
+            };
+
+            if let Some(x) = mv_counter.get_mut(key_to_update) {
+                *x += 1;
+            }
+        }
+
+        assert_eq!(*mv_counter.get("promotion").unwrap(), 4);
+        assert_eq!(*mv_counter.get("king").unwrap(), 5);
+        assert_eq!(*mv_counter.get("castle").unwrap(), 2);
+        assert_eq!(*mv_counter.get("en passant").unwrap(), 1);
+        assert_eq!(*mv_counter.get("double pawn push").unwrap(), 1);
+        assert_eq!(*mv_counter.get("rook").unwrap(), 10);
+        assert_eq!(*mv_counter.get("piece").unwrap(), 0);
+        assert_eq!(*mv_counter.get("pawn").unwrap(), 2);
+    }
+}
+
+#[cfg(test)]
+pub mod test_is_legal {
+    use crate::move_gen::{checkers_pinners_pinned, controlled_squares_with_king_gone};
+
+    use super::*;
+
+    #[test]
+    fn have_to_deal_with_check() {
+        let fen = "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q2/PPPBBPpP/R4K1R w KQkq - 0 1";
+        let result = Game::from_fen(fen);
+        assert!(result.is_ok());
+        let mut game = result.unwrap();
+
+        let side = game.state().side_to_move();
+        let mv_list = game.pseudo_legal_moves(side);
+        let (checkers, pinners, pinned) = checkers_pinners_pinned(game.position(), side.opposite());
+        let controlled_squares_with_king_gone_bb =
+            controlled_squares_with_king_gone(game.mut_position(), side);
+        let legal_check_preprocessing = LegalCheckPreprocessing::new(
+            checkers,
+            pinners,
+            pinned,
+            controlled_squares_with_king_gone_bb,
+        );
+
+        assert_eq!(legal_check_preprocessing.num_of_checkers(), 1);
+
+        let prev_state = game.state.encode();
+
+        for mv in mv_list.iter() {
+            if game.is_legal(*mv, &legal_check_preprocessing) {
+                let capture = game.make_move(*mv);
+                assert!(
+                    !game.position().in_check(side),
+                    "king is still in check after {}",
+                    mv
+                );
+                game.unmake_move(*mv, capture, prev_state);
+            }
+        }
+    }
+}
 #[cfg(test)]
 pub mod test_is_legal_en_passant {
     use super::*;
@@ -862,10 +1065,11 @@ pub mod test_is_legal_en_passant {
         assert_eq!(game.is_legal_en_passant_move(mv), false);
     }
 }
+
 #[cfg(test)]
 pub mod test_make_move {
     use super::*;
-    use crate::{piece_type::PromoteType, square::*};
+    use crate::{fen::STARTING_POSITION_FEN, piece_type::PromoteType, square::*};
 
     #[test]
     fn state_change_1() {
@@ -921,6 +1125,27 @@ pub mod test_make_move {
         assert!(!game.position.bb_side(side).is_set(from));
     }
 
+    #[test]
+    fn removes_en_passant_1() {
+        let fen = "5k2/8/8/8/8/8/4Q3/4K3 w - e6 0 1";
+        let result = Game::from_fen(fen);
+        assert!(result.is_ok());
+        let mut game = result.unwrap();
+        assert_eq!(game.state.en_passant().unwrap_or(square::NULL), E6);
+        let from = E2;
+        let to = F2;
+        let mv = Move::Piece(EncodedMove::new(from, to, PieceType::Queen, false));
+        let side = game.state.side_to_move();
+        game.make_move(mv);
+
+        assert!(game.state.en_passant().is_none());
+        assert!(game.position.at(to).is_some());
+        assert!(game.position.at(from).is_none());
+        assert!(game.position.bb_pc(PieceType::Queen, side).is_set(to));
+        assert!(!game.position.bb_pc(PieceType::Queen, side).is_set(from));
+        assert!(game.position.bb_side(side).is_set(to));
+        assert!(!game.position.bb_side(side).is_set(from));
+    }
     #[test]
     fn double_pawn_push_w() {
         let fen = "4k3/4p3/8/8/8/8/4P3/4K3 w - - 0 1";
@@ -1046,9 +1271,55 @@ pub mod test_make_move {
         let capture_piece_type = PieceType::Pawn;
         let mv = Move::EnPassant(EncodedMove::new(from, to, moving_piece_type, true));
         let side = game.state.side_to_move();
+        let en_passant_capture_sq = game.state().en_passant_capture_sq().unwrap();
         game.make_move(mv);
 
+        assert!(game.position.at(to).is_some());
+        assert!(game.position.at(from).is_none());
+        assert!(game.position.bb_pc(moving_piece_type, side).is_set(to));
+        assert!(!game.position.bb_pc(moving_piece_type, side).is_set(from));
+        assert!(!game
+            .position
+            .bb_pc(capture_piece_type, side.opposite())
+            .is_set(en_passant_capture_sq));
+        assert!(game.position.bb_side(side).is_set(to));
+        assert!(!game.position.bb_side(side).is_set(from));
+        assert!(!game
+            .position
+            .bb_side(side.opposite())
+            .is_set(en_passant_capture_sq));
+    }
+
+    #[test]
+    fn en_passant_iterative() {
+        let fen = STARTING_POSITION_FEN;
+        let result = Game::from_fen(fen);
+        assert!(result.is_ok());
+        let mut game = result.unwrap();
+
+        game.make_move(Move::DoublePawnPush(EncodedMove::new(
+            A2,
+            A4,
+            PieceType::Pawn,
+            false,
+        )));
+        game.make_move(Move::Pawn(EncodedMove::new(A7, A6, PieceType::Pawn, false)));
+        game.make_move(Move::Pawn(EncodedMove::new(A4, A5, PieceType::Pawn, false)));
+        game.make_move(Move::DoublePawnPush(EncodedMove::new(
+            B7,
+            B5,
+            PieceType::Pawn,
+            false,
+        )));
+        let from = A5;
+        let to = B6;
+        let moving_piece_type = PieceType::Pawn;
+        let capture_piece_type = PieceType::Pawn;
+        let mv = Move::EnPassant(EncodedMove::new(from, to, moving_piece_type, true));
+        let side = game.state.side_to_move();
         let en_passant_capture_sq = game.state().en_passant_capture_sq().unwrap();
+        game.make_move(mv);
+
         assert!(game.position.at(to).is_some());
         assert!(game.position.at(from).is_none());
         assert!(game.position.bb_pc(moving_piece_type, side).is_set(to));
@@ -1071,7 +1342,7 @@ pub mod test_make_move {
         let result = Game::from_fen(fen);
         assert!(result.is_ok());
         let mut game = result.unwrap();
-        let mv = Move::Castle(Castle::KingSide);
+        let mv = Move::Castle(Castle::Kingside);
         let side = game.state.side_to_move();
         game.make_move(mv);
 
@@ -1112,7 +1383,7 @@ pub mod test_make_move {
         let result = Game::from_fen(fen);
         assert!(result.is_ok());
         let mut game = result.unwrap();
-        let mv = Move::Castle(Castle::QueenSide);
+        let mv = Move::Castle(Castle::Queenside);
         let side = game.state.side_to_move();
         game.make_move(mv);
 
@@ -1153,7 +1424,7 @@ pub mod test_make_move {
         let result = Game::from_fen(fen);
         assert!(result.is_ok());
         let mut game = result.unwrap();
-        let mv = Move::Castle(Castle::KingSide);
+        let mv = Move::Castle(Castle::Kingside);
         let side = game.state.side_to_move();
         game.make_move(mv);
 
@@ -1194,7 +1465,7 @@ pub mod test_make_move {
         let result = Game::from_fen(fen);
         assert!(result.is_ok());
         let mut game = result.unwrap();
-        let mv = Move::Castle(Castle::QueenSide);
+        let mv = Move::Castle(Castle::Queenside);
         let side = game.state.side_to_move();
         game.make_move(mv);
 
@@ -1228,8 +1499,322 @@ pub mod test_make_move {
         assert!(!game.position.bb_side(side).is_set(king_before));
         assert!(!game.position.bb_side(side).is_set(rook_before));
     }
+
+    #[test]
+    fn king_mv_changes_castle_rights_1() {
+        let fen = "n1n5/PPPk4/8/8/8/8/4Kppp/5N1N b - - 0 1";
+        let result = Game::from_fen(fen);
+        assert!(result.is_ok());
+        let mut game = result.unwrap();
+        let mv = Move::King(EncodedMove::new(D7, E7, PieceType::King, false));
+        let side = game.state.side_to_move();
+        game.make_move(mv);
+
+        assert!(!game.state.castle_rights().can(side, Castle::Kingside));
+        assert!(!game.state.castle_rights().can(side, Castle::Queenside));
+    }
+
+    #[test]
+    fn king_mv_changes_castle_rights_2() {
+        let fen = "r3k2r/8/8/8/8/8/8/R3K2R b - - 0 1";
+        let result = Game::from_fen(fen);
+        assert!(result.is_ok());
+        let mut game = result.unwrap();
+        let mv = Move::King(EncodedMove::new(E8, E7, PieceType::King, false));
+        let side = game.state.side_to_move();
+        game.make_move(mv);
+
+        assert!(!game.state.castle_rights().can(side, Castle::Kingside));
+        assert!(!game.state.castle_rights().can(side, Castle::Queenside));
+    }
+
+    #[test]
+    fn rook_mv_changes_castle_rights_1() {
+        let fen = "r3k2r/8/8/8/8/8/8/R3K2R b KQkq - 0 1";
+        let result = Game::from_fen(fen);
+        assert!(result.is_ok());
+        let mut game = result.unwrap();
+        let mv = Move::Rook(EncodedMove::new(A8, A7, PieceType::Rook, false));
+        let side = game.state.side_to_move();
+        game.make_move(mv);
+
+        assert!(game.state.castle_rights().can(side, Castle::Kingside));
+        assert!(!game.state.castle_rights().can(side, Castle::Queenside));
+        assert!(game
+            .state
+            .castle_rights()
+            .can(side.opposite(), Castle::Kingside));
+        assert!(game
+            .state
+            .castle_rights()
+            .can(side.opposite(), Castle::Queenside));
+    }
+
+    #[test]
+    fn rook_mv_changes_castle_rights_2() {
+        let fen = "r3k2r/8/8/8/8/8/8/R3K2R b KQkq - 0 1";
+        let result = Game::from_fen(fen);
+        assert!(result.is_ok());
+        let mut game = result.unwrap();
+        let mv = Move::Rook(EncodedMove::new(H8, H7, PieceType::Rook, false));
+        let side = game.state.side_to_move();
+        game.make_move(mv);
+
+        assert!(!game.state.castle_rights().can(side, Castle::Kingside));
+        assert!(game.state.castle_rights().can(side, Castle::Queenside));
+        assert!(game
+            .state
+            .castle_rights()
+            .can(side.opposite(), Castle::Kingside));
+        assert!(game
+            .state
+            .castle_rights()
+            .can(side.opposite(), Castle::Queenside));
+    }
+
+    #[test]
+    fn rook_capture_changes_castle_rights_1() {
+        let fen = "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q2/PPPBBPpP/R3K2R b KQkq - 0 1";
+        let result = Game::from_fen(fen);
+        assert!(result.is_ok());
+        let mut game = result.unwrap();
+        let mv = Move::Pawn(EncodedMove::new(G2, H1, PieceType::Pawn, true));
+        let side = game.state.side_to_move();
+        game.make_move(mv);
+
+        assert!(!game
+            .state
+            .castle_rights()
+            .can(side.opposite(), Castle::Kingside));
+        assert!(game
+            .state
+            .castle_rights()
+            .can(side.opposite(), Castle::Queenside));
+        assert!(game.state.castle_rights().can(side, Castle::Kingside));
+        assert!(game
+            .state
+            .castle_rights()
+            .can(side.opposite(), Castle::Queenside));
+    }
+
+    #[test]
+    fn rook_capture_changes_castle_rights_2() {
+        let fen = "r3k2r/p1ppqpb1/bn2pnN1/3P4/1p2P3/2N2Q2/PPPBBPpP/R3K2R w KQkq - 0 1";
+        let result = Game::from_fen(fen);
+        assert!(result.is_ok());
+        let mut game = result.unwrap();
+        let mv = Move::Piece(EncodedMove::new(G6, H8, PieceType::Knight, true));
+        let side = game.state.side_to_move();
+        game.make_move(mv);
+
+        assert!(!game
+            .state
+            .castle_rights()
+            .can(side.opposite(), Castle::Kingside));
+        assert!(game
+            .state
+            .castle_rights()
+            .can(side.opposite(), Castle::Queenside));
+        assert!(game.state.castle_rights().can(side, Castle::Kingside));
+        assert!(game
+            .state
+            .castle_rights()
+            .can(side.opposite(), Castle::Queenside));
+    }
 }
 
+#[cfg(test)]
+pub mod test_zobrist {
+    use super::*;
+    use crate::{
+        fen::STARTING_POSITION_FEN, piece_type::PromoteType, square::*, state::zobrist::Zobrist,
+    };
+
+    const STARTING_ZOBRIST: Zobrist = Zobrist(1208123176030986407);
+
+    #[test]
+    fn zobrist_double_pawn_push() {
+        let fen = STARTING_POSITION_FEN;
+        let result = Game::from_fen(fen);
+        assert!(result.is_ok());
+        let mut game = result.unwrap();
+        assert_eq!(game.state().zobrist(), &STARTING_ZOBRIST);
+
+        let from = E2;
+        let to = E4;
+        let mv = Move::DoublePawnPush(EncodedMove::new(from, to, PieceType::Pawn, false));
+        let side = game.state().side_to_move();
+        game.make_move(mv);
+
+        let mut expected = STARTING_ZOBRIST.clone();
+        expected.hash_side(side.opposite());
+        expected.hash_en_passant(game.state().en_passant());
+        expected.hash_piece(side, PieceType::Pawn, from);
+        expected.hash_piece(side, PieceType::Pawn, to);
+
+        assert_eq!(&expected, game.state().zobrist());
+    }
+
+    #[test]
+    fn zobrist_castle_kingside_w() {
+        let fen = "r3k2r/pppppppp/8/8/8/8/PPPPPPPP/R3K2R w KQkq - 0 1";
+        let result = Game::from_fen(fen);
+        assert!(result.is_ok());
+        let mut game = result.unwrap();
+        let start_zobrist = game.state().zobrist().clone();
+
+        let mv = Move::Castle(Castle::Kingside);
+        let side = game.state().side_to_move();
+        game.make_move(mv);
+
+        let mut expected = start_zobrist.clone();
+        expected.hash_side(side.opposite());
+        expected.hash_piece(side, PieceType::Rook, H1);
+        expected.hash_piece(side, PieceType::Rook, F1);
+
+        expected.hash_piece(side, PieceType::King, E1);
+        expected.hash_piece(side, PieceType::King, G1);
+
+        expected.hash_castle_rights_single(side, Castle::Kingside);
+        expected.hash_castle_rights_single(side, Castle::Queenside);
+
+        assert_eq!(&expected, game.state().zobrist());
+    }
+
+    #[test]
+    fn zobrist_castle_queenside_b() {
+        let fen = "r3k2r/pppppppp/8/8/8/8/PPPPPPPP/R3K2R b KQkq - 0 1";
+        let result = Game::from_fen(fen);
+        assert!(result.is_ok());
+        let mut game = result.unwrap();
+        let start_zobrist = game.state().zobrist().clone();
+
+        let mv = Move::Castle(Castle::Queenside);
+        let side = game.state().side_to_move();
+        game.make_move(mv);
+
+        let mut expected = start_zobrist.clone();
+        expected.hash_side(side.opposite());
+        expected.hash_piece(side, PieceType::Rook, A8);
+        expected.hash_piece(side, PieceType::Rook, D8);
+
+        expected.hash_piece(side, PieceType::King, E8);
+        expected.hash_piece(side, PieceType::King, C8);
+
+        expected.hash_castle_rights_single(side, Castle::Kingside);
+        expected.hash_castle_rights_single(side, Castle::Queenside);
+
+        assert_eq!(&expected, game.state().zobrist());
+    }
+
+    #[test]
+    fn zobrist_promotion_move() {
+        let fen = "r3k3/pppppppP/8/8/4P3/8/PPPP1PP1/R3K2R w KQkq - 0 1";
+        let result = Game::from_fen(fen);
+        assert!(result.is_ok());
+        let mut game = result.unwrap();
+        let start_zobrist = game.state().zobrist().clone();
+
+        let from = H7;
+        let to = H8;
+        let promote_type = PromoteType::Knight;
+        let mv = Move::Promotion(PromotionMove::new(from, to, &promote_type, false));
+        let side = game.state().side_to_move();
+        game.make_move(mv);
+
+        let mut expected = start_zobrist;
+        expected.hash_side(side.opposite());
+        expected.hash_piece(side, PieceType::Pawn, from);
+        expected.hash_piece(side, PieceType::Knight, to);
+
+        assert_eq!(&expected, game.state().zobrist());
+    }
+
+    #[test]
+    fn zobrist_en_passant() {
+        let fen = "r3k3/ppppp1pP/8/8/4Pp2/8/PPPP1PP1/R3K2R b KQkq e3 0 1";
+        let result = Game::from_fen(fen);
+        assert!(result.is_ok());
+        let mut game = result.unwrap();
+        let start_zobrist = game.state().zobrist().clone();
+
+        let from = F4;
+        let to = E3;
+        let mv = Move::EnPassant(EncodedMove::new(from, to, PieceType::Pawn, true));
+        let side = game.state().side_to_move();
+        let en_passant = game.state().en_passant();
+        let en_passant_capture_sq = game.state().en_passant_capture_sq();
+        game.make_move(mv);
+
+        let mut expected = start_zobrist;
+        expected.hash_en_passant(en_passant);
+        expected.hash_piece(side, PieceType::Pawn, from);
+        expected.hash_piece(side, PieceType::Pawn, to);
+        expected.hash_piece(
+            side.opposite(),
+            PieceType::Pawn,
+            en_passant_capture_sq.unwrap(),
+        );
+
+        assert_eq!(&expected, game.state().zobrist());
+    }
+
+    #[test]
+    fn zobrist_unmake_double_pawn_push() {
+        let fen = STARTING_POSITION_FEN;
+        let result = Game::from_fen(fen);
+        assert!(result.is_ok());
+        let mut game = result.unwrap();
+        assert_eq!(game.state().zobrist(), &STARTING_ZOBRIST);
+
+        let from = E2;
+        let to = E4;
+        let mv = Move::DoublePawnPush(EncodedMove::new(from, to, PieceType::Pawn, false));
+        let prev_state = game.state().encode();
+        let capture = game.make_move(mv);
+        game.unmake_move(mv, capture, prev_state);
+
+        let expected = STARTING_ZOBRIST.clone();
+
+        assert_eq!(&expected, game.state().zobrist());
+    }
+
+    #[test]
+    fn zobrist_unmake_castle_kingside_w() {
+        let fen = "r3k2r/pppppppp/8/8/8/8/PPPPPPPP/R3K2R w KQkq - 0 1";
+        let result = Game::from_fen(fen);
+        assert!(result.is_ok());
+        let mut game = result.unwrap();
+        let start_zobrist = game.state().zobrist().clone();
+
+        let mv = Move::Castle(Castle::Kingside);
+        let prev_state = game.state().encode();
+        game.make_move(mv);
+        game.unmake_move(mv, None, prev_state);
+
+        let expected = start_zobrist.clone();
+
+        assert_eq!(&expected, game.state().zobrist());
+    }
+
+    #[test]
+    fn zobrist_unmake_castle_queenside_b() {
+        let fen = "r3k2r/pppppppp/8/8/8/8/PPPPPPPP/R3K2R b KQkq - 0 1";
+        let result = Game::from_fen(fen);
+        assert!(result.is_ok());
+        let mut game = result.unwrap();
+        let start_zobrist = game.state().zobrist().clone();
+
+        let mv = Move::Castle(Castle::Queenside);
+        let prev_state = game.state().encode();
+        game.make_move(mv);
+        game.unmake_move(mv, None, prev_state);
+
+        let expected = start_zobrist.clone();
+
+        assert_eq!(&expected, game.state().zobrist());
+    }
+}
 #[cfg(test)]
 pub mod test_unmake_move {
     use super::*;
@@ -1245,7 +1830,8 @@ pub mod test_unmake_move {
         let to = F2;
         let mv = Move::Piece(EncodedMove::new(from, to, PieceType::Queen, false));
         let side = game.state.side_to_move();
-        let (capture, prev_state) = game.make_move(mv);
+        let prev_state = game.state.encode();
+        let capture = game.make_move(mv);
         game.unmake_move(mv, capture, prev_state);
 
         assert_eq!(side, game.state.side_to_move());
@@ -1263,7 +1849,8 @@ pub mod test_unmake_move {
         let to = E5;
         let mv = Move::DoublePawnPush(EncodedMove::new(from, to, PieceType::Pawn, false));
         let side = game.state.side_to_move();
-        let (capture, prev_state) = game.make_move(mv);
+        let prev_state = game.state.encode();
+        let capture = game.make_move(mv);
         game.unmake_move(mv, capture, prev_state);
 
         assert_eq!(side, game.state.side_to_move());
@@ -1281,7 +1868,8 @@ pub mod test_unmake_move {
         let moving_piece_type = PieceType::Pawn;
         let mv = Move::EnPassant(EncodedMove::new(from, to, moving_piece_type, true));
         let en_passant_sq = game.state.en_passant();
-        let (capture, prev_state) = game.make_move(mv);
+        let prev_state = game.state.encode();
+        let capture = game.make_move(mv);
         game.unmake_move(mv, capture, prev_state);
 
         assert_eq!(en_passant_sq, game.state.en_passant());
@@ -1297,7 +1885,8 @@ pub mod test_unmake_move {
         let to = F2;
         let mv = Move::Piece(EncodedMove::new(from, to, PieceType::Queen, false));
         let side = game.state.side_to_move();
-        let (capture, prev_state) = game.make_move(mv);
+        let prev_state = game.state.encode();
+        let capture = game.make_move(mv);
         game.unmake_move(mv, capture, prev_state);
 
         assert!(game.position.at(from).is_some());
@@ -1319,7 +1908,8 @@ pub mod test_unmake_move {
         let to = A4;
         let mv = Move::Piece(EncodedMove::new(from, to, PieceType::Queen, true));
         let side = game.state.side_to_move();
-        let (capture, prev_state) = game.make_move(mv);
+        let prev_state = game.state.encode();
+        let capture = game.make_move(mv);
         game.unmake_move(mv, capture, prev_state);
 
         assert!(game.position.at(from).is_some());
@@ -1345,7 +1935,8 @@ pub mod test_unmake_move {
         let to = H8;
         let mv = Move::Promotion(PromotionMove::new(from, to, &PromoteType::Queen, false));
         let side = game.state.side_to_move();
-        let (capture, prev_state) = game.make_move(mv);
+        let prev_state = game.state.encode();
+        let capture = game.make_move(mv);
         game.unmake_move(mv, capture, prev_state);
 
         assert!(game.position.at(from).is_some());
@@ -1367,7 +1958,8 @@ pub mod test_unmake_move {
         let mv = Move::Promotion(PromotionMove::new(from, to, &PromoteType::Queen, true));
         let side = game.state.side_to_move();
         let capture_piece_type = PieceType::Bishop;
-        let (capture, prev_state) = game.make_move(mv);
+        let prev_state = game.state.encode();
+        let capture = game.make_move(mv);
         game.unmake_move(mv, capture, prev_state);
 
         assert!(game.position.at(from).is_some());
@@ -1395,7 +1987,8 @@ pub mod test_unmake_move {
         let capture_piece_type = PieceType::Pawn;
         let mv = Move::EnPassant(EncodedMove::new(from, to, moving_piece_type, true));
         let side = game.state.side_to_move();
-        let (capture, prev_state) = game.make_move(mv);
+        let prev_state = game.state.encode();
+        let capture = game.make_move(mv);
         game.unmake_move(mv, capture, prev_state);
 
         let en_passant_capture_sq = game.state().en_passant_capture_sq().unwrap();
@@ -1422,10 +2015,11 @@ pub mod test_unmake_move {
         let result = Game::from_fen(fen);
         assert!(result.is_ok());
         let mut game = result.unwrap();
-        let mv = Move::Castle(Castle::KingSide);
+        let mv = Move::Castle(Castle::Kingside);
         let side = game.state.side_to_move();
         let castle_rights = game.state.castle_rights();
-        let (capture, prev_state) = game.make_move(mv);
+        let prev_state = game.state.encode();
+        let capture = game.make_move(mv);
         game.unmake_move(mv, capture, prev_state);
 
         let king_after = F1;
@@ -1466,10 +2060,11 @@ pub mod test_unmake_move {
         let result = Game::from_fen(fen);
         assert!(result.is_ok());
         let mut game = result.unwrap();
-        let mv = Move::Castle(Castle::QueenSide);
+        let mv = Move::Castle(Castle::Queenside);
         let side = game.state.side_to_move();
         let castle_rights = game.state.castle_rights();
-        let (capture, prev_state) = game.make_move(mv);
+        let prev_state = game.state.encode();
+        let capture = game.make_move(mv);
         game.unmake_move(mv, capture, prev_state);
 
         let king_after = C1;
@@ -1510,10 +2105,11 @@ pub mod test_unmake_move {
         let result = Game::from_fen(fen);
         assert!(result.is_ok());
         let mut game = result.unwrap();
-        let mv = Move::Castle(Castle::KingSide);
+        let mv = Move::Castle(Castle::Kingside);
         let side = game.state.side_to_move();
         let castle_rights = game.state.castle_rights();
-        let (capture, prev_state) = game.make_move(mv);
+        let prev_state = game.state.encode();
+        let capture = game.make_move(mv);
         game.unmake_move(mv, capture, prev_state);
 
         let king_after = F8;
@@ -1554,10 +2150,11 @@ pub mod test_unmake_move {
         let result = Game::from_fen(fen);
         assert!(result.is_ok());
         let mut game = result.unwrap();
-        let mv = Move::Castle(Castle::QueenSide);
+        let mv = Move::Castle(Castle::Queenside);
         let castle_rights = game.state.castle_rights();
         let side = game.state.side_to_move();
-        let (capture, prev_state) = game.make_move(mv);
+        let prev_state = game.state.encode();
+        let capture = game.make_move(mv);
         game.unmake_move(mv, capture, prev_state);
 
         let king_after = C8;

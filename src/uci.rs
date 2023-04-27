@@ -3,13 +3,17 @@ use std::io;
 use crate::{
     fen::STARTING_POSITION_FEN,
     game::Game,
-    move_gen::pseudo_legal::{is_double_pawn_push, is_pseudo_legal},
-    mv::{EncodedMove, Move, PromotionMove},
+    move_gen::pseudo_legal::is_double_pawn_push,
+    mv::{castle::Castle, EncodedMove, Move, PromotionMove},
+    perft::count_moves_debug,
     piece_type::{PieceType, PromoteType},
     square::{self, Square},
 };
 
-fn main() {
+pub fn main() {
+    let mut game = Game::from_fen(STARTING_POSITION_FEN)
+        .expect("game is not loading the starting position fen correctly");
+
     loop {
         let mut input_str = String::new();
         io::stdin()
@@ -24,12 +28,15 @@ fn main() {
                 input_is_ready();
             }
             "ucinewgame" => {
-                input_uci_new_game();
+                game = input_uci_new_game();
             }
-            // input if input.starts_with("position") => input_position(input),
+            input if input.starts_with("position") => {
+                game = input_position(&input_str, game.clone());
+            }
+            input if input.starts_with("go perft") => input_perft(&input_str, &mut game),
             // input if input.starts_with("go") => input_go(),
             // "quit:" => input_quit(),
-            // "print" => print(),
+            "print" => print(&game),
             _ => {
                 println!("Invalid input: {}", input_str);
             }
@@ -57,10 +64,11 @@ fn input_quit() {
 }
 
 fn decode_algebra(move_notation: &str) -> (Square, Square, Option<PromoteType>) {
-    let from = move_notation.chars().nth(0).unwrap() as i32 - 'a' as i32
-        + (8 * (move_notation.chars().nth(1).unwrap() as i32 - '1' as i32));
-    let to = move_notation.chars().nth(2).unwrap() as i32 - 'a' as i32
-        + (8 * (move_notation.chars().nth(3).unwrap() as i32 - '1' as i32));
+    let mut chars = move_notation.chars();
+    let from = chars.next().unwrap() as i32 - 'a' as i32
+        + (8 * (chars.next().unwrap() as i32 - '1' as i32));
+    let to = chars.next().unwrap() as i32 - 'a' as i32
+        + (8 * (chars.next().unwrap() as i32 - '1' as i32));
 
     let mut promote_pc = None;
     if move_notation.len() == 5 {
@@ -103,7 +111,10 @@ pub mod test_decode_algebra {
     }
 }
 
-fn algebra_to_move(move_notation: &str, game: Game) -> Result<Move, &str> {
+fn algebra_to_move(move_notation: &str, game: &Game) -> Result<Move, String> {
+    if move_notation.len() < 4 || move_notation.len() > 5 {
+        return Err("invalid move notation".to_string());
+    }
     let (from, to, promote_pc) = decode_algebra(move_notation);
     let moving_piece_result = game.position().at(from);
     match moving_piece_result {
@@ -111,33 +122,34 @@ fn algebra_to_move(move_notation: &str, game: Game) -> Result<Move, &str> {
             let piece_type = pc.piece_type();
             let side = pc.side();
 
-            let friendly_occupied = game.position().bb_side(side);
-            let enemy_occupied = game.position().bb_side(side.opposite());
-            let en_passant = game.state().en_passant();
-
-            // handle castling
-
             match piece_type {
                 PieceType::King => {
                     let side = pc.side();
 
                     if from.distance(to) == 2 {
-                        mv = if color == Color::White {
-                            (Castle::W_Q.value << 14) | mv
+                        let (_, queenside_sq) = Castle::Queenside.king_squares(side);
+                        let (_, kingside_sq) = Castle::Kingside.king_squares(side);
+                        if to == queenside_sq {
+                            return Ok(Move::Castle(Castle::Queenside));
+                        } else if to == kingside_sq {
+                            return Ok(Move::Castle(Castle::Kingside));
                         } else {
-                            (Castle::B_q.value << 14) | mv
-                        };
-                    } else if from - to == -2 {
-                        mv = if color == Color::White {
-                            (Castle::W_K.value << 14) | mv
-                        } else {
-                            (Castle::B_k.value << 14) | mv
-                        };
+                            return Err("king is attemping to move two squares, but it is not a castle move".to_string());
+                        }
                     }
+
+                    let is_capture = match game.position().at(to) {
+                        Some(_) => true,
+                        None => false,
+                    };
+
+                    Ok(Move::King(EncodedMove::new(
+                        from, to, piece_type, is_capture,
+                    )))
                 }
                 PieceType::Pawn => {
                     let is_capture = match game.position().at(to) {
-                        Some(pc) => true,
+                        Some(_) => true,
                         None => false,
                     };
 
@@ -156,7 +168,7 @@ fn algebra_to_move(move_notation: &str, game: Game) -> Result<Move, &str> {
                             is_capture,
                         )))
                     } else if is_double_pawn_push(from, to, side) {
-                        Ok(Move::Pawn(EncodedMove::new(
+                        Ok(Move::DoublePawnPush(EncodedMove::new(
                             from,
                             to,
                             PieceType::Pawn,
@@ -173,7 +185,7 @@ fn algebra_to_move(move_notation: &str, game: Game) -> Result<Move, &str> {
                 }
                 PieceType::Rook => {
                     let is_capture = match game.position().at(to) {
-                        Some(pc) => true,
+                        Some(_) => true,
                         None => false,
                     };
                     Ok(Move::Rook(EncodedMove::new(
@@ -182,7 +194,7 @@ fn algebra_to_move(move_notation: &str, game: Game) -> Result<Move, &str> {
                 }
                 _ => {
                     let is_capture = match game.position().at(to) {
-                        Some(pc) => true,
+                        Some(_) => true,
                         None => false,
                     };
                     Ok(Move::Piece(EncodedMove::new(
@@ -191,34 +203,305 @@ fn algebra_to_move(move_notation: &str, game: Game) -> Result<Move, &str> {
                 }
             }
         }
-        None => Err(&format!("no piece at {from}")),
+        None => Err(format!("no piece at {from}")),
     }
 }
 
-// fn input_position(input: &str, game: Game) -> Game {
-//     let mut input = input[9..].to_owned() + " ";
-//     if input.contains("startpos ") {
-//         input = input[9..].to_owned();
-//         let result = Game::from_fen(STARTING_POSITION_FEN);
-//         game = result.unwrap();
-//     } else if input.contains("fen") {
-//         input = input[4..].to_owned();
-//         let result = Game::from_fen(&input);
-//         game = result.expect("invalid fen");
-//     }
-//
-//     if input.contains("moves") {
-//         input = input[input.find("moves").unwrap() + 6..].to_owned();
-//         // make each of the moves
-//         let moves = input.split(' ');
-//         for move_notation in moves {
-//             let mv = algebra_to_move(move_notation, game);
-//             game.make_move(mv);
-//         }
-//     }
-//
-//     game
-// }
+#[cfg(test)]
+pub mod test_algebra_to_move {
+    use super::*;
+    use crate::square::*;
+
+    #[test]
+    fn double_pawn_push() {
+        let fen = STARTING_POSITION_FEN;
+        let result = Game::from_fen(fen);
+        assert!(result.is_ok());
+        let game = result.unwrap();
+
+        let mv_result = algebra_to_move("e2e4", &game);
+        assert!(mv_result.is_ok());
+        assert_eq!(
+            mv_result.unwrap(),
+            Move::DoublePawnPush(EncodedMove::new(E2, E4, PieceType::Pawn, false))
+        )
+    }
+
+    #[test]
+    fn en_passant() {
+        let fen = "rnbqkbnr/ppp1pppp/8/3pP3/8/8/PPPP1PPP/RNBQKBNR w KQkq d6 0 1";
+        let result = Game::from_fen(fen);
+        assert!(result.is_ok());
+        let game = result.unwrap();
+
+        let mv_result = algebra_to_move("e5d6", &game);
+        assert!(mv_result.is_ok());
+        assert_eq!(
+            mv_result.unwrap(),
+            Move::EnPassant(EncodedMove::new(E5, D6, PieceType::Pawn, true))
+        )
+    }
+
+    #[test]
+    fn promotion() {
+        let fen = "rnbqkbn1/ppp1pppP/8/3p4/8/8/PPPP1PPP/RNBQKBNR w KQkq - 0 1";
+        let result = Game::from_fen(fen);
+        assert!(result.is_ok());
+        let game = result.unwrap();
+
+        let mv_result = algebra_to_move("h7h8q", &game);
+        assert!(mv_result.is_ok());
+        assert_eq!(
+            mv_result.unwrap(),
+            Move::Promotion(PromotionMove::new(H7, H8, &PromoteType::Queen, false))
+        )
+    }
+
+    #[test]
+    fn castle_kingside_w() {
+        let fen = "r3k2r/8/8/8/8/8/8/R3K2R w KQkq - 0 1";
+        let result = Game::from_fen(fen);
+        assert!(result.is_ok());
+        let game = result.unwrap();
+
+        let mv_result = algebra_to_move("e1g1", &game);
+        assert!(mv_result.is_ok());
+        assert_eq!(mv_result.unwrap(), Move::Castle(Castle::Kingside))
+    }
+
+    #[test]
+    fn castle_queenside_w() {
+        let fen = "r3k2r/8/8/8/8/8/8/R3K2R w KQkq - 0 1";
+        let result = Game::from_fen(fen);
+        assert!(result.is_ok());
+        let game = result.unwrap();
+
+        let mv_result = algebra_to_move("e1c1", &game);
+        assert!(mv_result.is_ok());
+        assert_eq!(mv_result.unwrap(), Move::Castle(Castle::Queenside))
+    }
+
+    #[test]
+    fn rook_capture() {
+        let fen = "r3k2r/8/8/8/8/8/8/R3K2R w KQkq - 0 1";
+        let result = Game::from_fen(fen);
+        assert!(result.is_ok());
+        let game = result.unwrap();
+
+        let mv_result = algebra_to_move("h1h8", &game);
+        assert!(mv_result.is_ok());
+        assert_eq!(
+            mv_result.unwrap(),
+            Move::Rook(EncodedMove::new(H1, H8, PieceType::Rook, true))
+        )
+    }
+
+    #[test]
+    fn piece_mv() {
+        let fen = "r3k2r/8/8/8/8/8/8/R3K1NR w - - 0 1";
+        let result = Game::from_fen(fen);
+        assert!(result.is_ok());
+        let game = result.unwrap();
+
+        let mv_result = algebra_to_move("g1f3", &game);
+        assert!(mv_result.is_ok());
+        assert_eq!(
+            mv_result.unwrap(),
+            Move::Piece(EncodedMove::new(G1, F3, PieceType::Knight, false))
+        )
+    }
+}
+
+pub fn input_position(input: &str, mut game: Game) -> Game {
+    let mut input = input[9..].to_owned() + " ";
+    if input.contains("startpos") {
+        input = input[9..].to_owned();
+        let result = Game::from_fen(STARTING_POSITION_FEN);
+        game = result.unwrap();
+    } else if input.contains("fen") {
+        input = input[4..].to_owned();
+        let result = Game::from_fen(input.trim());
+        game = result.expect("invalid fen");
+    }
+
+    if input.contains("moves") {
+        input = input[input.find("moves").unwrap() + 6..].to_owned();
+        // make each of the moves
+        let moves = input.trim().split(' ');
+        for move_notation in moves {
+            let mv_result = algebra_to_move(move_notation, &game);
+            match mv_result {
+                Ok(mv) => {
+                    game.make_move(mv);
+                }
+                Err(err) => {
+                    println!("{}", err);
+                }
+            }
+        }
+    }
+
+    game
+}
+
+fn input_perft(input: &str, game: &mut Game) {
+    let depth_result = input[8..].to_owned().trim().parse();
+    if let Ok(num) = depth_result {
+        count_moves_debug(num, game);
+    } else {
+        println!("wasn't given a valid number for perft depth'")
+    }
+}
+
+#[cfg(test)]
+pub mod test_input_position {
+    use crate::side::Side;
+    use crate::square::*;
+
+    use super::*;
+
+    #[test]
+    fn startpos() {
+        let fen = "r3k2r/8/8/8/8/8/8/R3K1NR w - - 0 1";
+        let result = Game::from_fen(fen);
+        assert!(result.is_ok());
+        let game = result.unwrap();
+
+        let game = input_position("position startpos", game);
+        let position = game.position();
+        let expected = unindent::unindent(
+            "
+                  ABCDEFGH
+                8|rnbqkbnr|8
+                7|pppppppp|7
+                6|........|6
+                5|........|5
+                4|........|4
+                3|........|3
+                2|PPPPPPPP|2
+                1|RNBQKBNR|1
+                  ABCDEFGH
+                ",
+        );
+
+        assert_eq!(position.to_string(), expected);
+    }
+
+    #[test]
+    fn fen() {
+        let fen = "r3k2r/8/8/8/8/8/8/R3K1NR w - - 0 1";
+        let result = Game::from_fen(fen);
+        assert!(result.is_ok());
+        let game = result.unwrap();
+
+        let game = input_position(&format!("position fen {}", fen), game);
+
+        let position = game.position();
+        let expected = unindent::unindent(
+            "
+                  ABCDEFGH
+                8|r...k..r|8
+                7|........|7
+                6|........|6
+                5|........|5
+                4|........|4
+                3|........|3
+                2|........|2
+                1|R...K.NR|1
+                  ABCDEFGH
+                ",
+        );
+
+        assert_eq!(position.to_string(), expected);
+    }
+
+    #[test]
+    fn moves_1() {
+        let fen = "r3k2r/8/8/8/8/8/8/R3K1NR w - - 0 1";
+        let result = Game::from_fen(fen);
+        assert!(result.is_ok());
+        let game = result.unwrap();
+
+        let game = input_position("position startpos moves e2e4 e7e5 g1f3 b8c6", game);
+
+        let position = game.position();
+        println!("{}", position.to_string());
+        let expected = unindent::unindent(
+            "
+                  ABCDEFGH
+                8|r.bqkbnr|8
+                7|pppp.ppp|7
+                6|..n.....|6
+                5|....p...|5
+                4|....P...|4
+                3|.....N..|3
+                2|PPPP.PPP|2
+                1|RNBQKB.R|1
+                  ABCDEFGH
+                ",
+        );
+
+        assert_eq!(position.to_string(), expected);
+    }
+
+    #[test]
+    fn moves_2() {
+        let fen = STARTING_POSITION_FEN;
+        let result = Game::from_fen(fen);
+        assert!(result.is_ok());
+        let game = result.unwrap();
+
+        let game = input_position("position startpos moves a2a3 b7b5", game);
+
+        let position = game.position();
+        println!("{}", position.to_string());
+        let expected = unindent::unindent(
+            "
+                  ABCDEFGH
+                8|rnbqkbnr|8
+                7|p.pppppp|7
+                6|........|6
+                5|.p......|5
+                4|........|4
+                3|P.......|3
+                2|.PPPPPPP|2
+                1|RNBQKBNR|1
+                  ABCDEFGH
+                ",
+        );
+
+        assert_eq!(position.to_string(), expected);
+    }
+
+    #[test]
+    fn moves_iterative() {
+        let fen = STARTING_POSITION_FEN;
+        let result = Game::from_fen(fen);
+        assert!(result.is_ok());
+        let game = result.unwrap();
+        let game = input_position("position startpos moves a2a3", game);
+        let game = input_position("position startpos moves a2a3 b7b5", game);
+
+        let position = game.position();
+        println!("{}", position.to_string());
+        let expected = unindent::unindent(
+            "
+                  ABCDEFGH
+                8|rnbqkbnr|8
+                7|p.pppppp|7
+                6|........|6
+                5|.p......|5
+                4|........|4
+                3|P.......|3
+                2|.PPPPPPP|2
+                1|RNBQKBNR|1
+                  ABCDEFGH
+                ",
+        );
+
+        assert_eq!(position.to_string(), expected);
+    }
+}
 
 // fn move_to_algebra(mv: i32) -> String {
 //     let from = Square::lookup((mv >> 7) & 127);
@@ -250,6 +533,6 @@ fn algebra_to_move(move_notation: &str, game: Game) -> Result<Move, &str> {
 //     println!("bestmove {}", algebra);
 // }
 
-fn print(game: Game) {
-    println!("{}", game.position().to_string());
+fn print(game: &Game) {
+    println!("{}", game.position());
 }

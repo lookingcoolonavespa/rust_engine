@@ -29,11 +29,11 @@ impl Square {
     }
 
     pub fn distance(self, sq: Square) -> u32 {
-        let diff = (self.0 - sq.0) as i32;
-        diff.abs() as u32
+        let diff = self.0 as i32 - sq.0 as i32;
+        diff.unsigned_abs()
     }
 
-    pub fn to_u32(&self) -> u32 {
+    pub fn to_u32(self) -> u32 {
         self.0 as u32
     }
 
@@ -91,6 +91,9 @@ impl Square {
 
 impl fmt::Display for Square {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        if self == &NULL {
+            return write!(f, "null");
+        }
         let file_char = FILES[self.file()];
         let rank_char = RANKS[self.rank()];
         let str = format!("{}{}", file_char, rank_char);

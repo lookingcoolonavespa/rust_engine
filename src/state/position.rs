@@ -1,6 +1,5 @@
 use core::fmt;
 
-use crate::attack_table::AttackTable;
 use crate::bitboard::BB;
 use crate::move_gen::is_sq_attacked;
 use crate::piece::Piece;
@@ -13,7 +12,6 @@ use crate::util::grid_to_string;
 pub struct Position {
     bb_sides: [BB; 2],
     bb_pieces: [BB; 6],
-    attack_tables: AttackTable,
     board: [Option<Piece>; 64],
 }
 impl Position {
@@ -21,12 +19,11 @@ impl Position {
         Position {
             bb_sides,
             bb_pieces,
-            attack_tables: AttackTable::new(),
             board,
         }
     }
 
-    pub fn bb_occupied(self) -> BB {
+    pub fn bb_occupied(&self) -> BB {
         self.bb_sides[Side::White.to_usize()] | (self.bb_sides[Side::Black.to_usize()])
     }
 
@@ -47,9 +44,6 @@ impl Position {
     }
 
     pub fn king_sq(&self, side: Side) -> Square {
-        if (self.bb_pieces[PieceType::King.to_usize()] & self.bb_sides[side.to_usize()]).empty() {
-            println!("{}", self);
-        };
         (self.bb_pieces[PieceType::King.to_usize()] & self.bb_sides[side.to_usize()]).bitscan()
     }
 
@@ -68,20 +62,19 @@ impl Position {
         self.board[sq.to_usize()]
     }
 
-    pub fn remove_piece(&mut self, piece_type: PieceType, sq: Square, side: Side) {
-        let from_bb = BB::new(sq);
+    pub fn remove_piece(&mut self, piece_type: PieceType, from: Square, side: Side) {
+        let from_bb = BB::new(from);
 
         self.bb_pieces[piece_type.to_usize()] ^= from_bb;
         self.bb_sides[side.to_usize()] ^= from_bb;
 
-        self.board[sq.to_usize()] = None;
+        self.board[from.to_usize()] = None;
     }
 
     pub fn remove_at(&mut self, sq: Square) -> Option<Piece> {
         let result = self.board[sq.to_usize()];
-        if result.is_some() {
-            let piece = result.unwrap();
-            self.remove_piece(piece.piece_type(), sq, piece.side());
+        if let Some(pc) = result {
+            self.remove_piece(pc.piece_type(), sq, pc.side());
         }
 
         result
@@ -103,7 +96,7 @@ impl Position {
 
     pub fn in_check(&self, side: Side) -> bool {
         let king_sq = self.king_sq(side);
-        is_sq_attacked(&self, king_sq, side.opposite())
+        is_sq_attacked(self, king_sq, side.opposite())
     }
 }
 
@@ -111,16 +104,16 @@ impl fmt::Display for Position {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let s = grid_to_string(|sq: Square| -> char {
             let result = self.at(sq);
-            if result.is_none() {
-                '.'
-            } else {
+            if let Some(_) = result {
                 let piece = result.unwrap();
                 let (side, pc) = piece.decode();
 
-                return match side {
-                    Side::White => pc.to_char().to_uppercase().nth(0).unwrap(),
+                match side {
+                    Side::White => pc.to_char().to_uppercase().next().unwrap(),
                     Side::Black => pc.to_char(),
-                };
+                }
+            } else {
+                '.'
             }
         });
 

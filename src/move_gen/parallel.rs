@@ -1,6 +1,6 @@
 use crate::{
     bitboard::{self, BB, FILE_A, FILE_B, FILE_G, FILE_H, NOT_FILE_A, NOT_FILE_H},
-    side::{self, Side},
+    side::Side,
 };
 
 fn occluded_east_slider_fill(pieces_bb: BB, occupied: BB) -> BB {
@@ -64,7 +64,7 @@ fn occluded_west_slider_fill(pieces_bb: BB, occupied: BB) -> BB {
 
 fn occluded_south_east_slider_fill(pieces_bb: BB, occupied: BB) -> BB {
     let empty = !occupied;
-    let mut prop = empty & bitboard::NOT_FILE_H;
+    let mut prop = empty & bitboard::NOT_FILE_A;
     let mut gen = pieces_bb;
 
     // need to shift empty to mask off blocked squares behind piece
@@ -93,7 +93,7 @@ fn occluded_north_east_slider_fill(pieces_bb: BB, occupied: BB) -> BB {
 
 fn occluded_south_west_slider_fill(pieces_bb: BB, occupied: BB) -> BB {
     let empty = !occupied;
-    let mut prop = empty & bitboard::NOT_FILE_A;
+    let mut prop = empty & bitboard::NOT_FILE_H;
     let mut gen = pieces_bb;
 
     // need to shift empty to mask off blocked squares behind piece
@@ -121,6 +121,7 @@ fn occluded_north_west_slider_fill(pieces_bb: BB, occupied: BB) -> BB {
     gen
 }
 
+// need to shift occluded_fill bb to include closest blocker
 fn west_slider_attacks(pieces_bb: BB, occupied: BB) -> BB {
     (occluded_west_slider_fill(pieces_bb, occupied) >> 1) & bitboard::NOT_FILE_H
 }
@@ -179,7 +180,7 @@ pub fn knight_jumps(knights_bb: BB) -> BB {
     attacks_one << 16 | attacks_one >> 16 | attacks_two << 8 | attacks_two >> 8
 }
 
-pub fn pawn_attacks(pawns_bb: BB, side: Side) -> BB {
+pub fn pawn_controlled_squares(pawns_bb: BB, side: Side) -> BB {
     let right_attack = if side == Side::White {
         (pawns_bb << 9) & NOT_FILE_A
     } else {
@@ -197,7 +198,7 @@ pub fn pawn_attacks(pawns_bb: BB, side: Side) -> BB {
 #[cfg(test)]
 pub mod test_pawn_attacks {
     use super::*;
-    use crate::{game::Game, piece_type::PieceType, side};
+    use crate::{game::Game, piece_type::PieceType};
 
     #[test]
     fn pawn_attacks_1() {
@@ -206,7 +207,7 @@ pub mod test_pawn_attacks {
         assert!(result.is_ok());
         let game = result.unwrap();
         let pawns_bb = game.position().bb_pc(PieceType::Pawn, Side::Black);
-        let attacks = pawn_attacks(pawns_bb, Side::Black);
+        let attacks = pawn_controlled_squares(pawns_bb, Side::Black);
 
         println!("{}", attacks);
 
@@ -234,7 +235,7 @@ pub mod test_pawn_attacks {
         assert!(result.is_ok());
         let game = result.unwrap();
         let pawns_bb = game.position().bb_pc(PieceType::Pawn, Side::White);
-        let attacks = pawn_attacks(pawns_bb, Side::White);
+        let attacks = pawn_controlled_squares(pawns_bb, Side::White);
 
         println!("{}", attacks);
 
@@ -258,7 +259,7 @@ pub mod test_pawn_attacks {
 #[cfg(test)]
 pub mod test_knight_jumps {
     use super::*;
-    use crate::{game::Game, piece_type::PieceType, side};
+    use crate::{game::Game, piece_type::PieceType};
 
     #[test]
     fn knight_jumps_1() {
@@ -380,6 +381,36 @@ pub mod test_slider_attacks {
         );
         assert_eq!(attacks.to_string(), expected);
     }
+
+    #[test]
+    fn west_slider_attacks_edge_of_the_board() {
+        let fen = "4k3/8/8/8/8/R7/8/4K3 w - - 0 1";
+        let result = Game::from_fen(fen);
+        assert!(result.is_ok());
+        let game = result.unwrap();
+        let (_, non_diag_attackers) = game.position().bb_sliders(Side::White);
+        let occupied = game.position().bb_occupied();
+        let attacks = west_slider_attacks(non_diag_attackers, occupied);
+
+        println!("{}", attacks);
+
+        let expected = unindent::unindent(
+            "
+              ABCDEFGH
+            8|........|8
+            7|........|7
+            6|........|6
+            5|........|5
+            4|........|4
+            3|........|3
+            2|........|2
+            1|........|1
+              ABCDEFGH
+            ",
+        );
+        assert_eq!(attacks.to_string(), expected);
+    }
+
     #[test]
     fn east_slider_attacks_1() {
         let fen = "4k3/8/8/8/8/8/2R5/6K1 w - - 0 1";
@@ -402,6 +433,35 @@ pub mod test_slider_attacks {
             4|........|4
             3|........|3
             2|...#####|2
+            1|........|1
+              ABCDEFGH
+            ",
+        );
+        assert_eq!(attacks.to_string(), expected);
+    }
+
+    #[test]
+    fn east_slider_attacks_on_edge_of_board() {
+        let fen = "4k3/8/8/8/8/7R/8/4K3 w - - 0 1";
+        let result = Game::from_fen(fen);
+        assert!(result.is_ok());
+        let game = result.unwrap();
+        let (_, non_diag_attackers) = game.position().bb_sliders(Side::White);
+        let occupied = game.position().bb_occupied();
+        let attacks = east_slider_attacks(non_diag_attackers, occupied);
+
+        println!("{}", attacks);
+
+        let expected = unindent::unindent(
+            "
+              ABCDEFGH
+            8|........|8
+            7|........|7
+            6|........|6
+            5|........|5
+            4|........|4
+            3|........|3
+            2|........|2
             1|........|1
               ABCDEFGH
             ",
@@ -439,6 +499,35 @@ pub mod test_slider_attacks {
     }
 
     #[test]
+    fn south_east_slider_attacks_on_edge_of_board() {
+        let fen = "4k3/8/7b/8/8/8/8/4K3 w - - 0 1";
+        let result = Game::from_fen(fen);
+        assert!(result.is_ok());
+        let game = result.unwrap();
+        let (diag_attackers, _) = game.position().bb_sliders(Side::Black);
+        let occupied = game.position().bb_occupied();
+        let attacks = south_east_slider_attacks(diag_attackers, occupied);
+
+        println!("{}", attacks);
+
+        let expected = unindent::unindent(
+            "
+              ABCDEFGH
+            8|........|8
+            7|........|7
+            6|........|6
+            5|........|5
+            4|........|4
+            3|........|3
+            2|........|2
+            1|........|1
+              ABCDEFGH
+            ",
+        );
+        assert_eq!(attacks.to_string(), expected);
+    }
+
+    #[test]
     fn south_west_slider_attacks_1() {
         let fen = "4k3/6b1/8/8/8/8/8/4K2B w - - 0 1";
         let result = Game::from_fen(fen);
@@ -461,6 +550,95 @@ pub mod test_slider_attacks {
             3|..#.....|3
             2|.#......|2
             1|#.......|1
+              ABCDEFGH
+            ",
+        );
+        assert_eq!(attacks.to_string(), expected);
+    }
+
+    #[test]
+    fn south_west_slider_attacks_2() {
+        let fen = "rn1qkbnr/p1pppppp/b7/1p6/5P2/P7/1PPPP1PP/RNBQKBNR w KQkq - 0 1";
+        let result = Game::from_fen(fen);
+        assert!(result.is_ok());
+        let game = result.unwrap();
+        let bishops_bb = game
+            .position()
+            .bb_pc(crate::piece_type::PieceType::Bishop, Side::Black);
+        let occupied = game.position().bb_occupied();
+        let attacks = south_west_slider_attacks(bishops_bb, occupied);
+
+        let expected = unindent::unindent(
+            "
+              ABCDEFGH
+            8|........|8
+            7|....#...|7
+            6|........|6
+            5|........|5
+            4|........|4
+            3|........|3
+            2|........|2
+            1|........|1
+              ABCDEFGH
+            ",
+        );
+        assert_eq!(attacks.to_string(), expected);
+    }
+
+    #[test]
+    fn south_west_slider_attacks_on_edge_of_board() {
+        let fen = "4k3/8/b7/8/8/8/8/4K3 w - - 0 1";
+        let result = Game::from_fen(fen);
+        assert!(result.is_ok());
+        let game = result.unwrap();
+        let bishops_bb = game
+            .position()
+            .bb_pc(crate::piece_type::PieceType::Bishop, Side::Black);
+        let occupied = game.position().bb_occupied();
+        let attacks = south_west_slider_attacks(bishops_bb, occupied);
+
+        println!("{}", attacks);
+
+        let expected = unindent::unindent(
+            "
+              ABCDEFGH
+            8|........|8
+            7|........|7
+            6|........|6
+            5|........|5
+            4|........|4
+            3|........|3
+            2|........|2
+            1|........|1
+              ABCDEFGH
+            ",
+        );
+        assert_eq!(attacks.to_string(), expected);
+    }
+
+    #[test]
+    fn north_west_slider_attacks_on_edge_of_board() {
+        let fen = "4k3/8/8/8/B7/8/8/4K3 w - - 0 1";
+        let result = Game::from_fen(fen);
+        assert!(result.is_ok());
+        let game = result.unwrap();
+        let (diag_attackers, _) = game.position().bb_sliders(Side::White);
+        let occupied = game.position().bb_occupied();
+        let attacks = north_west_slider_attacks(diag_attackers, occupied);
+
+        println!("{}", attacks);
+
+        let expected = unindent::unindent(
+            "
+              ABCDEFGH
+            8|........|8
+            7|........|7
+            6|........|6
+            5|........|5
+            4|........|4
+            3|........|3
+            2|........|2
+            1|........|1
               ABCDEFGH
             ",
         );
@@ -517,6 +695,35 @@ pub mod test_slider_attacks {
             4|........|4
             3|........|3
             2|......#.|2
+            1|........|1
+              ABCDEFGH
+            ",
+        );
+        assert_eq!(attacks.to_string(), expected);
+    }
+
+    #[test]
+    fn north_east_slider_attacks_on_edge_of_board() {
+        let fen = "4k3/8/8/7B/8/8/8/4K3 w - - 0 1";
+        let result = Game::from_fen(fen);
+        assert!(result.is_ok());
+        let game = result.unwrap();
+        let (diag_attackers, _) = game.position().bb_sliders(Side::White);
+        let occupied = game.position().bb_occupied();
+        let attacks = north_east_slider_attacks(diag_attackers, occupied);
+
+        println!("{}", attacks);
+
+        let expected = unindent::unindent(
+            "
+              ABCDEFGH
+            8|........|8
+            7|........|7
+            6|........|6
+            5|........|5
+            4|........|4
+            3|........|3
+            2|........|2
             1|........|1
               ABCDEFGH
             ",
@@ -602,6 +809,50 @@ pub mod test_slider_attacks {
             6|....##..|6
             5|...##...|5
             4|..##....|4
+            3|........|3
+            2|........|2
+            1|........|1
+              ABCDEFGH
+            ",
+        );
+        assert_eq!(attacks.to_string(), expected);
+    }
+}
+
+#[cfg(test)]
+pub mod test_diagonal_attacks {
+    use crate::game::Game;
+
+    use super::*;
+
+    #[test]
+    fn test_1() {
+        let fen = "rn1qkbnr/p1pppppp/b7/1p6/5P2/P7/1PPPP1PP/RNBQKBNR w KQkq - 0 1";
+        let result = Game::from_fen(fen);
+        assert!(result.is_ok());
+        let game = result.unwrap();
+        let (diag_attackers, _) = game.position().bb_sliders(Side::Black);
+        let occupied = game.position().bb_occupied();
+        let attacks = diagonal_attacks(diag_attackers, occupied);
+        let north_west = north_west_slider_attacks(diag_attackers, occupied);
+        let north_east = north_east_slider_attacks(diag_attackers, occupied);
+        let south_east = south_east_slider_attacks(diag_attackers, occupied);
+        let south_west = south_west_slider_attacks(diag_attackers, occupied);
+
+        println!("{}", north_west);
+        println!("{}", north_east);
+        println!("{}", south_west);
+        println!("{}", south_east);
+        println!("{}", attacks);
+
+        let expected = unindent::unindent(
+            "
+              ABCDEFGH
+            8|..#.....|8
+            7|.##.#.#.|7
+            6|........|6
+            5|.#......|5
+            4|........|4
             3|........|3
             2|........|2
             1|........|1

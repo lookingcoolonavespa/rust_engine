@@ -15,7 +15,7 @@ pub fn grid_to_string<F: Fn(Square) -> char>(char_at: F) -> String {
         string += &format!("|{}\n", row_chars[row]);
     }
 
-    string + &"  ABCDEFGH\n".to_string()
+    string + "  ABCDEFGH\n"
 }
 
 #[cfg(test)]

@@ -42,30 +42,35 @@ pub fn is_sq_attacked(position: &Position, sq: Square, attack_side: Side) -> boo
     false
 }
 
-pub fn attacks_with_king_gone(position: &mut Position, side: Side) -> BB {
+pub fn controlled_squares_with_king_gone(position: &mut Position, side: Side) -> BB {
     let defend_side = side.opposite();
     let king_sq = position.king_sq(defend_side);
     position.remove_at(king_sq);
-    let attacks = attacks(position, side);
+    let attacks = controlled_squares(position, side);
     position.place_piece(PieceType::King, king_sq, defend_side);
 
     attacks
 }
 
-pub fn attacks(position: &Position, side: Side) -> BB {
-    let knight_attacks = parallel::knight_jumps(position.bb_pc(PieceType::Knight, side));
+pub fn controlled_squares(position: &Position, side: Side) -> BB {
+    // includes squares occupied by pieces of the same color because those pieces are defended
+    let knight_controlled_squares = parallel::knight_jumps(position.bb_pc(PieceType::Knight, side));
 
-    let pawn_attacks = parallel::pawn_attacks(position.bb_pc(PieceType::Pawn, side), side);
+    let pawn_controlled_squares =
+        parallel::pawn_controlled_squares(position.bb_pc(PieceType::Pawn, side), side);
 
     let (diag_attackers, non_diag_attackers) = position.bb_sliders(side);
     let occupied = position.bb_occupied();
-    let diagonal_attacks = parallel::diagonal_attacks(diag_attackers, occupied);
-    let file_rank_attacks = parallel::file_rank_attacks(non_diag_attackers, occupied);
+    let diagonal_controlled_squares = parallel::diagonal_attacks(diag_attackers, occupied);
+    let file_rank_controlled_squares = parallel::file_rank_attacks(non_diag_attackers, occupied);
 
-    let king_attacks = pseudo_legal::king_attacks(position.king_sq(side), position.bb_side(side));
+    let king_controlled_squares = KING_MOVES[position.king_sq(side).to_usize()];
 
-    (king_attacks | pawn_attacks | knight_attacks | diagonal_attacks | file_rank_attacks)
-        & !position.bb_side(side)
+    king_controlled_squares
+        | pawn_controlled_squares
+        | knight_controlled_squares
+        | diagonal_controlled_squares
+        | file_rank_controlled_squares
 }
 
 pub fn checkers_pinners_pinned(position: &Position, attack_side: Side) -> (BB, BB, BB) {
@@ -215,7 +220,7 @@ pub mod test_attacks {
         let position = game.position();
         let side = game.state().side_to_move();
 
-        let attacks_bb = attacks(position, side);
+        let attacks_bb = controlled_squares(position, side);
         let expected = unindent::unindent(
             "
               ABCDEFGH
@@ -244,7 +249,7 @@ pub mod test_attacks {
         let position = game.position();
         let side = game.state().side_to_move();
 
-        let attacks_bb = attacks(position, side);
+        let attacks_bb = controlled_squares(position, side);
         let expected = unindent::unindent(
             "
               ABCDEFGH
@@ -273,22 +278,23 @@ pub mod test_attacks {
         let position = game.position();
         let side = game.state().side_to_move();
 
-        let attacks_bb = attacks(position, side);
+        let attacks_bb = controlled_squares(position, side);
         let expected = unindent::unindent(
             "
               ABCDEFGH
             8|....#.#.|8
             7|.#.#...#|7
-            6|..#.....|6
+            6|..#..#..|6
             5|#..##..#|5
             4|.#.##.#.|4
             3|.....#.#|3
             2|.#.###..|2
-            1|#..#.#.#|1
+            1|#..###.#|1
               ABCDEFGH
             ",
         );
 
+        println!("{}", expected);
         println!("{}", attacks_bb.to_string());
         assert_eq!(expected, attacks_bb.to_string());
     }
