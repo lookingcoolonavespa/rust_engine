@@ -465,6 +465,7 @@ impl Game {
             self.state.increase_fullmoves();
         };
         self.state.update_side_to_move();
+        self.state.push_to_zobrist_table(*self.state.zobrist());
 
         capture
     }
@@ -527,6 +528,7 @@ impl Game {
     }
 
     pub fn unmake_move(&mut self, mv: Move, capture: Option<Piece>, prev_state: EncodedState) {
+        self.state.rollback_zobrist_table(*self.state.zobrist());
         self.state.decode_from(prev_state);
         let side = self.state.side_to_move();
 
@@ -548,6 +550,13 @@ impl Game {
                 self.unmake_en_passant_move(en_passant_mv, side);
             }
         };
+    }
+
+    pub fn is_draw(&self) -> bool {
+        let last_zobrist = self.state.zobrist();
+        self.state.is_draw_by_repetition(*last_zobrist)
+            || self.state.is_draw_by_halfmoves()
+            || self.position.insufficient_material()
     }
 }
 
@@ -1679,6 +1688,13 @@ pub mod test_zobrist {
         expected.hash_castle_rights_single(side, Castle::Queenside);
 
         assert_eq!(&expected, game.state().zobrist());
+        assert_eq!(
+            game.state
+                .zobrist_table()
+                .get(&game.state.zobrist().to_u64())
+                .expect("zobrist was not found in zobrist table"),
+            &1u8
+        )
     }
 
     #[test]
@@ -1705,6 +1721,13 @@ pub mod test_zobrist {
         expected.hash_castle_rights_single(side, Castle::Queenside);
 
         assert_eq!(&expected, game.state().zobrist());
+        assert_eq!(
+            game.state
+                .zobrist_table()
+                .get(&game.state.zobrist().to_u64())
+                .expect("zobrist was not found in zobrist table"),
+            &1u8
+        )
     }
 
     #[test]
@@ -1728,6 +1751,13 @@ pub mod test_zobrist {
         expected.hash_piece(side, PieceType::Knight, to);
 
         assert_eq!(&expected, game.state().zobrist());
+        assert_eq!(
+            game.state
+                .zobrist_table()
+                .get(&game.state.zobrist().to_u64())
+                .expect("zobrist was not found in zobrist table"),
+            &1u8
+        )
     }
 
     #[test]
@@ -1757,6 +1787,13 @@ pub mod test_zobrist {
         );
 
         assert_eq!(&expected, game.state().zobrist());
+        assert_eq!(
+            game.state
+                .zobrist_table()
+                .get(&game.state.zobrist().to_u64())
+                .expect("zobrist was not found in zobrist table"),
+            &1u8
+        )
     }
 
     #[test]
@@ -1772,11 +1809,19 @@ pub mod test_zobrist {
         let mv = Move::DoublePawnPush(EncodedMove::new(from, to, PieceType::Pawn, false));
         let prev_state = game.state().encode();
         let capture = game.make_move(mv);
+        let zobrist = game.state.zobrist().to_u64();
         game.unmake_move(mv, capture, prev_state);
 
         let expected = STARTING_ZOBRIST.clone();
 
         assert_eq!(&expected, game.state().zobrist());
+        assert_eq!(
+            game.state
+                .zobrist_table()
+                .get(&zobrist)
+                .expect("zobrist was not found in zobrist table"),
+            &0u8
+        )
     }
 
     #[test]
@@ -1790,11 +1835,19 @@ pub mod test_zobrist {
         let mv = Move::Castle(Castle::Kingside);
         let prev_state = game.state().encode();
         game.make_move(mv);
+        let zobrist = game.state.zobrist().to_u64();
         game.unmake_move(mv, None, prev_state);
 
         let expected = start_zobrist.clone();
 
         assert_eq!(&expected, game.state().zobrist());
+        assert_eq!(
+            game.state
+                .zobrist_table()
+                .get(&zobrist)
+                .expect("zobrist was not found in zobrist table"),
+            &0u8
+        )
     }
 
     #[test]
@@ -1808,11 +1861,19 @@ pub mod test_zobrist {
         let mv = Move::Castle(Castle::Queenside);
         let prev_state = game.state().encode();
         game.make_move(mv);
+        let zobrist = game.state.zobrist().to_u64();
         game.unmake_move(mv, None, prev_state);
 
         let expected = start_zobrist.clone();
 
         assert_eq!(&expected, game.state().zobrist());
+        assert_eq!(
+            game.state
+                .zobrist_table()
+                .get(&zobrist)
+                .expect("zobrist was not found in zobrist table"),
+            &0u8
+        )
     }
 }
 #[cfg(test)]
@@ -2187,5 +2248,155 @@ pub mod test_unmake_move {
         assert!(!game.position.bb_side(side).is_set(king_after));
         assert!(game.position.bb_side(side).is_set(king_before));
         assert!(game.position.bb_side(side).is_set(rook_before));
+    }
+}
+
+#[cfg(test)]
+pub mod test_is_draw {
+    use super::*;
+    use crate::square::*;
+
+    #[test]
+    fn is_draw_by_repetition_1() {
+        let fen = "4k3/8/8/8/2B5/8/8/4K3 w - - 0 1";
+        let result = Game::from_fen(fen);
+        assert!(result.is_ok());
+        let mut game = result.unwrap();
+        let mv_1 = Move::Piece(EncodedMove::new(C4, B5, PieceType::Bishop, false));
+        let mv_2 = Move::King(EncodedMove::new(E8, E7, PieceType::King, false));
+        let mv_3 = Move::Piece(EncodedMove::new(B5, C4, PieceType::Bishop, false));
+        let mv_4 = Move::King(EncodedMove::new(E7, E8, PieceType::King, false));
+
+        game.make_move(mv_1);
+        game.make_move(mv_2);
+        game.make_move(mv_3);
+        game.make_move(mv_4);
+
+        game.make_move(mv_1);
+        game.make_move(mv_2);
+        game.make_move(mv_3);
+        game.make_move(mv_4);
+
+        assert!(game.is_draw())
+    }
+
+    #[test]
+    fn is_draw_by_repetition_2() {
+        let fen = "4k1nn/8/8/8/2B5/8/8/4K3 w - - 0 1";
+        let result = Game::from_fen(fen);
+        assert!(result.is_ok());
+        let mut game = result.unwrap();
+        let mv_1 = Move::Piece(EncodedMove::new(C4, B5, PieceType::Bishop, false));
+        let mv_2 = Move::King(EncodedMove::new(E8, E7, PieceType::King, false));
+        let mv_3 = Move::Piece(EncodedMove::new(B5, C4, PieceType::Bishop, false));
+        let mv_4 = Move::King(EncodedMove::new(E7, E8, PieceType::King, false));
+
+        game.make_move(mv_1);
+        game.make_move(mv_2);
+        game.make_move(mv_3);
+        game.make_move(mv_4);
+
+        game.make_move(mv_1);
+        game.make_move(mv_2);
+        game.make_move(mv_3);
+
+        assert!(!game.is_draw())
+    }
+
+    #[test]
+    fn is_draw_by_insufficient_material_1() {
+        // king + bishop vs king
+        let fen = "4k3/8/8/8/2B5/8/8/4K3 w - - 0 1";
+        let result = Game::from_fen(fen);
+        assert!(result.is_ok());
+        let game = result.unwrap();
+
+        assert!(game.is_draw());
+    }
+
+    #[test]
+    fn is_draw_by_insufficient_material_2() {
+        // king + bishop vs king + bishop (opposite colors)
+        let fen = "4kb2/8/8/8/2B5/8/8/4K3 w - - 0 1";
+        let result = Game::from_fen(fen);
+        assert!(result.is_ok());
+        let game = result.unwrap();
+
+        assert!(!game.is_draw());
+    }
+
+    #[test]
+    fn is_draw_by_insufficient_material_3() {
+        // king + bishop vs king + bishop (same colors)
+        let fen = "4k1b1/8/8/8/2B5/8/8/4K3 w - - 0 1";
+        let result = Game::from_fen(fen);
+        assert!(result.is_ok());
+        let game = result.unwrap();
+
+        assert!(game.is_draw());
+    }
+
+    #[test]
+    fn is_draw_by_insufficient_material_4() {
+        // king + knight vs king
+        let fen = "4k3/6n1/8/8/8/8/8/4K3 w - - 0 1";
+        let result = Game::from_fen(fen);
+        assert!(result.is_ok());
+        let game = result.unwrap();
+
+        assert!(game.is_draw());
+    }
+
+    #[test]
+    fn is_draw_by_insufficient_material_5() {
+        // king vs king
+        let fen = "4k3/8/8/8/8/8/8/4K3 w - - 0 1";
+        let result = Game::from_fen(fen);
+        assert!(result.is_ok());
+        let game = result.unwrap();
+
+        assert!(game.is_draw());
+    }
+
+    #[test]
+    fn is_draw_by_insufficient_material_6() {
+        // king + queen vs king
+        let fen = "4k3/5q2/8/8/8/8/8/4K3 w - - 0 1";
+        let result = Game::from_fen(fen);
+        assert!(result.is_ok());
+        let game = result.unwrap();
+
+        assert!(!game.is_draw());
+    }
+
+    #[test]
+    fn is_draw_by_insufficient_material_7() {
+        // king + rook vs king
+        let fen = "4k3/8/8/8/8/8/7R/4K3 w - - 0 1";
+        let result = Game::from_fen(fen);
+        assert!(result.is_ok());
+        let game = result.unwrap();
+
+        assert!(!game.is_draw());
+    }
+
+    #[test]
+    fn is_draw_by_halfmoves_1() {
+        let fen = "4k3/5q2/8/8/8/1Q6/8/4K3 w - - 49 1";
+        let result = Game::from_fen(fen);
+        assert!(result.is_ok());
+        let game = result.unwrap();
+
+        assert!(!game.is_draw());
+    }
+
+    #[test]
+    fn is_draw_by_halfmoves_2() {
+        let fen = "4k3/5q2/8/8/8/1Q6/8/4K3 w - - 50 1";
+        let result = Game::from_fen(fen);
+        assert!(result.is_ok());
+        let game = result.unwrap();
+
+        assert!(game.is_draw());
     }
 }

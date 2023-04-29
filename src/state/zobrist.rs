@@ -9,10 +9,10 @@ use crate::{
 
 use super::{castle_rights::CastleRights, position::Position};
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Zobrist(pub u64);
 impl Zobrist {
-    fn to_u64(self) -> u64 {
+    pub fn to_u64(self) -> u64 {
         self.0
     }
 

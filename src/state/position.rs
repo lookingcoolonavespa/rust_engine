@@ -98,6 +98,46 @@ impl Position {
         let king_sq = self.king_sq(side);
         is_sq_attacked(self, king_sq, side.opposite())
     }
+
+    pub fn insufficient_material(&self) -> bool {
+        // king versus king
+        // king and bishop versus king
+        // king and knight versus king
+        // king and bishop versus king and bishop with the bishops on the same color
+
+        if self.bb_pieces[PieceType::Pawn.to_usize()].not_empty() {
+            return false;
+        }
+
+        if (self.bb_pieces[PieceType::Rook.to_usize()]
+            | self.bb_pieces[PieceType::Queen.to_usize()])
+        .not_empty()
+        {
+            return false;
+        }
+
+        let pieces_left_count = self.bb_occupied().count_ones();
+        // if there are 3 or less pieces on the board and no rooks, no queens, no pawns,
+        // means it is king+bishop vs king or king+knight/king or
+        // king vs king
+        if pieces_left_count < 4 {
+            return true;
+        }
+
+        let bishops_bb = self.bb_pieces[PieceType::Bishop.to_usize()];
+        if pieces_left_count == 4
+            && bishops_bb.count_ones() == 2
+            && self.bb_pc(PieceType::Bishop, Side::White).count_ones() == 1
+        {
+            let first_bishop_is_light = bishops_bb.bitscan().is_light_sq();
+            let second_bishop_bb = bishops_bb ^ bishops_bb.lsb();
+            let second_bishop_is_light = second_bishop_bb.bitscan().is_light_sq();
+
+            return first_bishop_is_light == second_bishop_is_light;
+        }
+
+        false
+    }
 }
 
 impl fmt::Display for Position {

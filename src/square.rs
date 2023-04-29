@@ -87,6 +87,10 @@ impl Square {
     pub fn knight_jumps(self) -> BB {
         KNIGHT_JUMPS[self.0]
     }
+
+    pub fn is_light_sq(self) -> bool {
+        self.0 % 2 == 0
+    }
 }
 
 impl fmt::Display for Square {

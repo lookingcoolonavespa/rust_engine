@@ -3,6 +3,7 @@ pub mod position;
 pub mod zobrist;
 
 use core::fmt;
+use std::collections::HashMap;
 
 use self::{castle_rights::CastleRights, zobrist::Zobrist};
 use crate::{
@@ -11,6 +12,7 @@ use crate::{
     square::{self, Square},
 };
 
+type ZobristTable = HashMap<u64, u8>;
 #[derive(Clone)]
 pub struct State {
     en_passant: Option<Square>,
@@ -19,6 +21,7 @@ pub struct State {
     zobrist: Zobrist,
     halfmoves: u16,
     fullmoves: u16,
+    zobrist_table: ZobristTable,
 }
 
 impl State {
@@ -37,6 +40,7 @@ impl State {
             halfmoves,
             fullmoves,
             zobrist,
+            zobrist_table: HashMap::new(),
         }
     }
 
@@ -81,6 +85,10 @@ impl State {
 
     pub fn mut_zobrist(&mut self) -> &mut Zobrist {
         &mut self.zobrist
+    }
+
+    pub fn zobrist_table(&self) -> &ZobristTable {
+        &self.zobrist_table
     }
 
     pub fn encode(&self) -> EncodedState {
@@ -138,6 +146,39 @@ impl State {
     pub fn update_side_to_move(&mut self) {
         self.side_to_move = self.side_to_move.opposite();
         self.zobrist.hash_side(self.side_to_move);
+    }
+
+    pub fn rollback_zobrist_table(&mut self, zobrist: Zobrist) {
+        debug_assert!(
+            self.zobrist_table
+                .get(&zobrist.to_u64())
+                .expect("rolled back zobrist table but zobrist was not stored in table")
+                > &0u8
+        );
+        self.zobrist_table
+            .entry(zobrist.to_u64())
+            .and_modify(|count| *count -= 1);
+    }
+
+    pub fn push_to_zobrist_table(&mut self, zobrist: Zobrist) {
+        self.zobrist_table
+            .entry(zobrist.to_u64())
+            .and_modify(|count| *count += 1)
+            .or_insert(1);
+    }
+
+    pub fn is_draw_by_repetition(&self, last_zobrist: Zobrist) -> bool {
+        let count_result = self.zobrist_table.get(&last_zobrist.to_u64());
+
+        if let Some(count) = count_result {
+            count > &2u8
+        } else {
+            false
+        }
+    }
+
+    pub fn is_draw_by_halfmoves(&self) -> bool {
+        self.halfmoves > 49
     }
 }
 
