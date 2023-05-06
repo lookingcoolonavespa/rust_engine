@@ -6,7 +6,10 @@ use crate::{
     state::position::Position,
 };
 
+use self::check_legal::pin_direction;
+
 pub mod check_legal;
+pub mod escape_check;
 mod parallel;
 mod pawn;
 pub mod pseudo_legal;
@@ -91,12 +94,11 @@ pub fn checkers_pinners_pinned(position: &Position, attack_side: Side) -> (BB, B
     // deal with slider pieces
     let occupied = position.bb_occupied();
     let (diag_attackers, non_diag_attackers) = position.bb_sliders(attack_side);
-    let potential_checkers =
+    let potential_slider_checkers =
         (diag_attackers & king_sq.bishop_rays()) | (non_diag_attackers & king_sq.rook_rays());
 
-    for sq in potential_checkers.iter() {
-        let bb_squares_between = bb_squares_between(king_sq, sq);
-        let blockers = bb_squares_between & occupied;
+    for sq in potential_slider_checkers.iter() {
+        let blockers = bb_squares_between(king_sq, sq) & occupied;
 
         if blockers.empty() {
             checkers |= BB::new(sq);

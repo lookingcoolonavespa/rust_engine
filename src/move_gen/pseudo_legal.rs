@@ -2,33 +2,11 @@ use std::ops::{Shl, Shr};
 
 use crate::{
     bitboard::{self, BB, KING_MOVES, KNIGHT_JUMPS, PAWN_CAPTURES, PAWN_PUSHES},
-    piece_type::PieceType,
     side::Side,
     square::Square,
 };
 
 use super::slider::*;
-
-pub fn is_pseudo_legal(
-    piece_type: PieceType,
-    from: Square,
-    to: Square,
-    friendly_occupied: BB,
-    enemy_occupied: BB,
-    en_passant: Option<Square>,
-    side: Side,
-) -> bool {
-    match piece_type {
-        PieceType::King => king_attacks(from, friendly_occupied).is_set(to),
-        PieceType::Pawn => {
-            pawn(from, friendly_occupied, enemy_occupied, en_passant, side).is_set(to)
-        }
-        PieceType::Knight => knight_attacks(from, friendly_occupied).is_set(to),
-        PieceType::Bishop => bishop_attacks(from, friendly_occupied, enemy_occupied).is_set(to),
-        PieceType::Queen => queen_attacks(from, friendly_occupied, enemy_occupied).is_set(to),
-        PieceType::Rook => rook_attacks(from, friendly_occupied, enemy_occupied).is_set(to),
-    }
-}
 
 pub fn bishop_attacks(from: Square, friendly_occupied: BB, enemy_occupied: BB) -> BB {
     let occupied = friendly_occupied | enemy_occupied;
@@ -87,7 +65,7 @@ pub fn pawn(
         | (pawn_attacks(from, color) & (enemy_occupied | en_passant_bb))
 }
 
-fn pawn_attacks(from: Square, color: Side) -> BB {
+pub fn pawn_attacks(from: Square, color: Side) -> BB {
     PAWN_CAPTURES[color.to_usize()][from.to_usize()]
 }
 
@@ -106,6 +84,35 @@ pub fn is_double_pawn_push(from: Square, to: Square, side: Side) -> bool {
             from_bb >> 16 == to_bb
         }
     }
+}
+
+pub fn bishop_captures(from: Square, friendly_occupied: BB, enemy_occupied: BB) -> BB {
+    let occupied = friendly_occupied | enemy_occupied;
+
+    (diagonal_moves_from_sq(from, occupied) | anti_diagonal_moves_from_sq(from, occupied))
+        & enemy_occupied
+}
+
+pub fn rook_captures(from: Square, friendly_occupied: BB, enemy_occupied: BB) -> BB {
+    let occupied = friendly_occupied | enemy_occupied;
+
+    (vertical_moves_from_sq(from, occupied) | horizontal_moves_from_sq(from, occupied))
+        & enemy_occupied
+}
+
+pub fn queen_captures(from: Square, friendly_occupied: BB, enemy_occupied: BB) -> BB {
+    let occupied = friendly_occupied | enemy_occupied;
+    ((vertical_moves_from_sq(from, occupied) | horizontal_moves_from_sq(from, occupied))
+        | (diagonal_moves_from_sq(from, occupied) | anti_diagonal_moves_from_sq(from, occupied)))
+        & enemy_occupied
+}
+
+pub fn knight_captures(from: Square, enemy_occupied: BB) -> BB {
+    KNIGHT_JUMPS[from.to_usize()] & enemy_occupied
+}
+
+pub fn king_captures(from: Square, enemy_occupied: BB) -> BB {
+    KING_MOVES[from.to_usize()] & enemy_occupied
 }
 
 #[cfg(test)]

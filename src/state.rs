@@ -109,6 +109,7 @@ impl State {
     }
 
     pub fn set_en_passant(&mut self, en_passant_sq: Square) {
+        self.zobrist.hash_en_passant(self.en_passant);
         self.en_passant = Some(en_passant_sq);
         self.zobrist.hash_en_passant(Some(en_passant_sq));
     }
@@ -119,16 +120,23 @@ impl State {
     }
 
     pub fn remove_castle_rights(&mut self, side: Side, castle: Castle) {
-        self.castle_rights = self.castle_rights.remove_rights(side, castle);
-        self.zobrist.hash_castle_rights_single(side, castle);
+        if self.castle_rights.can(side, castle) {
+            self.zobrist.hash_castle_rights_single(side, castle);
+            self.castle_rights = self.castle_rights.remove_rights(side, castle);
+        }
     }
 
     pub fn remove_castle_rights_for_color(&mut self, side: Side) {
+        if self.castle_rights.can(side, Castle::Kingside) {
+            self.zobrist
+                .hash_castle_rights_single(side, Castle::Kingside);
+        }
+
+        if self.castle_rights.can(side, Castle::Queenside) {
+            self.zobrist
+                .hash_castle_rights_single(side, Castle::Queenside);
+        }
         self.castle_rights = self.castle_rights.remove_rights_for_color(side);
-        self.zobrist
-            .hash_castle_rights_single(side, Castle::Kingside);
-        self.zobrist
-            .hash_castle_rights_single(side, Castle::Queenside);
     }
 
     pub fn reset_halfmoves(&mut self) {

@@ -74,7 +74,10 @@ impl EncodedMove {
 }
 impl Decode for EncodedMove {
     fn decode_into_bb(&self) -> (BB, BB) {
-        (BB((self.0 & 63) as u64), BB((self.0 as u64 >> 6) & 63))
+        (
+            BB::new(Square::new((self.0 & 63) as usize)),
+            BB::new(Square::new((self.0 as square::Internal >> 6) & 63)),
+        )
     }
 
     fn decode_into_squares(&self) -> (Square, Square) {

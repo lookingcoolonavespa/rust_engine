@@ -1,10 +1,13 @@
 use crate::{
-    bitboard::{squares_between::bb_squares_between, BB},
-    mv::{castle::Castle, Decode},
+    bitboard::{self, squares_between::bb_squares_between, BB},
+    game::Game,
+    mv::{castle::Castle, Decode, EncodedMove},
     side::Side,
     square::Square,
     state::position::Position,
 };
+
+use super::{checkers_pinners_pinned, controlled_squares_with_king_gone};
 
 pub struct LegalCheckPreprocessing {
     checkers: BB,
@@ -22,6 +25,18 @@ impl LegalCheckPreprocessing {
         pinned: BB,
         controlled_squares_with_king_gone_bb: BB,
     ) -> LegalCheckPreprocessing {
+        LegalCheckPreprocessing {
+            checkers,
+            pinners,
+            pinned,
+            controlled_squares_with_king_gone_bb,
+        }
+    }
+
+    pub fn from(game: &mut Game, side: Side) -> LegalCheckPreprocessing {
+        let (checkers, pinners, pinned) = checkers_pinners_pinned(game.position(), side.opposite());
+        let controlled_squares_with_king_gone_bb =
+            controlled_squares_with_king_gone(game.mut_position(), side.opposite());
         LegalCheckPreprocessing {
             checkers,
             pinners,
@@ -48,6 +63,63 @@ impl LegalCheckPreprocessing {
     pub fn num_of_checkers(&self) -> u32 {
         self.checkers().count_ones()
     }
+}
+
+pub fn pin_direction(piece_sq: Square, king_sq: Square) -> BB {
+    // piece is assumed to be pinned
+
+    let pinned_on_diagonal = piece_sq.diagonal_mask().is_set(king_sq);
+    if pinned_on_diagonal {
+        return piece_sq.diagonal_mask();
+    }
+
+    let pinned_on_anti_diagonal = piece_sq.anti_diagonal_mask().is_set(king_sq);
+    if pinned_on_anti_diagonal {
+        return piece_sq.anti_diagonal_mask();
+    }
+
+    let pinned_on_file = piece_sq.file_mask().is_set(king_sq);
+    if pinned_on_file {
+        return piece_sq.file_mask();
+    }
+
+    let pinned_on_rank = piece_sq.rank_mask().is_set(king_sq);
+    if pinned_on_rank {
+        return piece_sq.rank_mask();
+    }
+
+    bitboard::EMPTY
+}
+
+pub fn is_en_passant_pinned_on_rank(
+    position: &Position,
+    defend_side: Side,
+    pawn_sq: Square,
+    en_passant_capture_sq: Square,
+    king_sq: Square,
+) -> bool {
+    if !pawn_sq.rank_mask().is_set(king_sq) {
+        return false;
+    }
+
+    let attack_side = defend_side.opposite();
+    let (_, non_diag_attackers) = position.bb_sliders(attack_side);
+    let potential_pinners = non_diag_attackers & king_sq.rook_rays();
+
+    let occupied = position.bb_occupied();
+
+    for sq in potential_pinners.iter() {
+        let blockers = bb_squares_between(king_sq, sq) & occupied;
+
+        if blockers.count_ones() == 2
+            && blockers.is_set(pawn_sq)
+            && blockers.is_set(en_passant_capture_sq)
+        {
+            return true;
+        }
+    }
+
+    false
 }
 
 fn is_pinned_move_legal(from_sq: Square, to_sq: Square, king_sq: Square) -> bool {
@@ -87,27 +159,25 @@ pub fn is_legal_king_move(
 
 pub fn is_legal_regular_move(
     position: &Position,
-    mv: impl Decode,
+    from: Square,
+    to: Square,
     side: Side,
     legal_check_preprocessing: &LegalCheckPreprocessing,
 ) -> bool {
-    let (from_sq, to_sq) = mv.decode_into_squares();
-
     let num_of_checkers = legal_check_preprocessing.num_of_checkers();
 
-    let pinned = legal_check_preprocessing.pinned();
-    let is_pinned = pinned.is_set(from_sq);
+    let is_pinned = legal_check_preprocessing.pinned().is_set(from);
 
     if num_of_checkers == 0 && !is_pinned {
         return true;
     }
 
     if num_of_checkers == 0 && is_pinned {
-        return is_pinned_move_legal(from_sq, to_sq, position.king_sq(side));
+        return is_pinned_move_legal(from, to, position.king_sq(side));
     }
 
     if num_of_checkers == 1 {
-        if is_pinned && !is_pinned_move_legal(from_sq, to_sq, position.king_sq(side)) {
+        if is_pinned && !is_pinned_move_legal(from, to, position.king_sq(side)) {
             return false;
         }
 
@@ -116,7 +186,7 @@ pub fn is_legal_regular_move(
         let squares_btwn_checker_and_king =
             checkers | bb_squares_between(checker_sq, position.king_sq(side));
 
-        return squares_btwn_checker_and_king.is_set(to_sq);
+        return squares_btwn_checker_and_king.is_set(to);
     }
 
     // num of checkers is 2
@@ -141,6 +211,24 @@ pub fn is_legal_castle(
     }
 
     (castle.pass_through_squares(side) & attacked_squares_bb).empty()
+}
+
+pub fn is_legal_en_passant_move(
+    position: &Position,
+    from: Square,
+    to: Square,
+    en_passant_capture_sq: Square,
+    side: Side,
+    legal_check_preprocessing: &LegalCheckPreprocessing,
+) -> bool {
+    is_legal_regular_move(position, from, to, side, legal_check_preprocessing)
+        && !is_en_passant_pinned_on_rank(
+            position,
+            side,
+            from,
+            en_passant_capture_sq,
+            position.king_sq(side),
+        )
 }
 
 #[cfg(test)]
@@ -321,12 +409,27 @@ pub mod test_is_legal_regular_or_capture_move {
 
         let legal_mv = EncodedMove::new(E2, H5, PieceType::Queen, true);
         let illegal_mv = EncodedMove::new(E2, D3, PieceType::Queen, false);
+
+        let (legal_from, legal_to) = legal_mv.decode_into_squares();
+        let (illegal_from, illegal_to) = illegal_mv.decode_into_squares();
         assert_eq!(
-            is_legal_regular_move(position, legal_mv, side, &legal_check_preprocessing),
+            is_legal_regular_move(
+                position,
+                legal_from,
+                legal_to,
+                side,
+                &legal_check_preprocessing
+            ),
             true
         );
         assert_eq!(
-            is_legal_regular_move(position, illegal_mv, side, &legal_check_preprocessing),
+            is_legal_regular_move(
+                position,
+                illegal_from,
+                illegal_to,
+                side,
+                &legal_check_preprocessing
+            ),
             false
         );
     }
@@ -352,12 +455,27 @@ pub mod test_is_legal_regular_or_capture_move {
 
         let legal_mv = EncodedMove::new(D2, E2, PieceType::Queen, false);
         let illegal_mv = EncodedMove::new(D2, D3, PieceType::Queen, false);
+
+        let (legal_from, legal_to) = legal_mv.decode_into_squares();
+        let (illegal_from, illegal_to) = illegal_mv.decode_into_squares();
         assert_eq!(
-            is_legal_regular_move(position, legal_mv, side, &legal_check_preprocessing),
+            is_legal_regular_move(
+                position,
+                legal_from,
+                legal_to,
+                side,
+                &legal_check_preprocessing
+            ),
             true
         );
         assert_eq!(
-            is_legal_regular_move(position, illegal_mv, side, &legal_check_preprocessing),
+            is_legal_regular_move(
+                position,
+                illegal_from,
+                illegal_to,
+                side,
+                &legal_check_preprocessing
+            ),
             false
         );
     }
@@ -383,12 +501,20 @@ pub mod test_is_legal_regular_or_capture_move {
 
         let legal_mv = EncodedMove::new(D1, E1, PieceType::King, false);
         let illegal_mv = EncodedMove::new(D2, E2, PieceType::Queen, false);
+
+        let (illegal_from, illegal_to) = illegal_mv.decode_into_squares();
         assert_eq!(
             is_legal_king_move(legal_mv, &legal_check_preprocessing),
             true
         );
         assert_eq!(
-            is_legal_regular_move(position, illegal_mv, side, &legal_check_preprocessing),
+            is_legal_regular_move(
+                position,
+                illegal_from,
+                illegal_to,
+                side,
+                &legal_check_preprocessing
+            ),
             false
         );
     }
@@ -806,5 +932,165 @@ pub mod test_is_legal_castle {
             ),
             true
         );
+    }
+}
+
+#[cfg(test)]
+pub mod test_is_legal_en_passant {
+    use super::*;
+    use crate::square::*;
+
+    #[test]
+    fn legal() {
+        let fen = "4k3/8/8/4Pp2/8/8/8/4K3 w - f6 0 1";
+        let result = Game::from_fen(fen);
+        assert!(result.is_ok());
+        let mut game = result.unwrap();
+        let side = game.state().side_to_move();
+        let from = E5;
+        let to = F6;
+
+        let legal_check_preprocessing = LegalCheckPreprocessing::from(&mut game, side);
+
+        assert!(is_legal_en_passant_move(
+            game.position(),
+            from,
+            to,
+            game.state().en_passant_capture_sq().unwrap(),
+            side,
+            &legal_check_preprocessing
+        ));
+    }
+
+    #[test]
+    fn pinned_on_file() {
+        let fen = "4k3/4r3/8/4Pp2/8/8/8/4K3 w - f6 0 1";
+        let result = Game::from_fen(fen);
+        assert!(result.is_ok());
+        let mut game = result.unwrap();
+        let side = game.state().side_to_move();
+        let from = E5;
+        let to = F6;
+
+        let legal_check_preprocessing = LegalCheckPreprocessing::from(&mut game, side);
+
+        assert!(!is_legal_en_passant_move(
+            game.position(),
+            from,
+            to,
+            game.state().en_passant_capture_sq().unwrap(),
+            side,
+            &legal_check_preprocessing
+        ));
+    }
+
+    #[test]
+    fn pinned_on_file_2() {
+        let fen = "4k3/5r2/8/4Pp2/8/8/5K2/8 w - f6 0 1";
+        let result = Game::from_fen(fen);
+        assert!(result.is_ok());
+        let mut game = result.unwrap();
+        let side = game.state().side_to_move();
+        let from = E5;
+        let to = F6;
+
+        let legal_check_preprocessing = LegalCheckPreprocessing::from(&mut game, side);
+
+        assert!(is_legal_en_passant_move(
+            game.position(),
+            from,
+            to,
+            game.state().en_passant_capture_sq().unwrap(),
+            side,
+            &legal_check_preprocessing
+        ));
+    }
+
+    #[test]
+    fn pinned_on_diagonal_1() {
+        let fen = "4k3/2b5/8/4Pp2/5K2/8/8/8 w - f6 0 1";
+        let result = Game::from_fen(fen);
+        assert!(result.is_ok());
+        let mut game = result.unwrap();
+        let side = game.state().side_to_move();
+        let from = E5;
+        let to = F6;
+
+        let legal_check_preprocessing = LegalCheckPreprocessing::from(&mut game, side);
+
+        assert!(!is_legal_en_passant_move(
+            game.position(),
+            from,
+            to,
+            game.state().en_passant_capture_sq().unwrap(),
+            side,
+            &legal_check_preprocessing
+        ));
+    }
+
+    #[test]
+    fn pinned_on_diagonal_2() {
+        let fen = "4k3/3b4/8/4Pp2/6K1/8/8/8 w - f6 0 1";
+        let result = Game::from_fen(fen);
+        assert!(result.is_ok());
+        let mut game = result.unwrap();
+        let side = game.state().side_to_move();
+        let from = E5;
+        let to = F6;
+
+        let legal_check_preprocessing = LegalCheckPreprocessing::from(&mut game, side);
+
+        assert!(!is_legal_en_passant_move(
+            game.position(),
+            from,
+            to,
+            game.state().en_passant_capture_sq().unwrap(),
+            side,
+            &legal_check_preprocessing
+        ));
+    }
+
+    #[test]
+    fn pinned_on_rank_1() {
+        let fen = "4k3/8/8/1r2PpK1/8/8/8/8 w - f6 0 1";
+        let result = Game::from_fen(fen);
+        assert!(result.is_ok());
+        let mut game = result.unwrap();
+        let side = game.state().side_to_move();
+        let from = E5;
+        let to = F6;
+
+        let legal_check_preprocessing = LegalCheckPreprocessing::from(&mut game, side);
+
+        assert!(!is_legal_en_passant_move(
+            game.position(),
+            from,
+            to,
+            game.state().en_passant_capture_sq().unwrap(),
+            side,
+            &legal_check_preprocessing
+        ));
+    }
+
+    #[test]
+    fn pinned_on_rank_2() {
+        let fen = "4k3/8/8/3KPpr1/8/8/8/8 w - f6 0 1";
+        let result = Game::from_fen(fen);
+        assert!(result.is_ok());
+        let mut game = result.unwrap();
+        let side = game.state().side_to_move();
+        let from = E5;
+        let to = F6;
+
+        let legal_check_preprocessing = LegalCheckPreprocessing::from(&mut game, side);
+
+        assert!(!is_legal_en_passant_move(
+            game.position(),
+            from,
+            to,
+            game.state().en_passant_capture_sq().unwrap(),
+            side,
+            &legal_check_preprocessing
+        ));
     }
 }

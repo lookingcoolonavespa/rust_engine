@@ -26,6 +26,8 @@ pub const PIECE_TYPE_MAP: [PieceType; 6] = [
     PieceType::King,
 ];
 
+pub const PIECE_TYPE_SCORE_MAP: [u32; 6] = [100, 300, 350, 500, 900, 10000];
+
 pub const PROMOTE_TYPE_ARR: [PromoteType; 4] = [
     PromoteType::Knight,
     PromoteType::Bishop,
@@ -49,6 +51,10 @@ impl PieceType {
 
     pub fn to_char(self) -> char {
         PIECE_CHARS[self.to_usize()]
+    }
+
+    pub fn score(self) -> u32 {
+        PIECE_TYPE_SCORE_MAP[self.to_usize()]
     }
 }
 

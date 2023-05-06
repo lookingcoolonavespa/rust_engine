@@ -21,7 +21,7 @@ pub fn load_fen(fen: &str) -> Result<(Position, State), String> {
     let mut fen_state = fen.split(' ');
 
     let fen_board = fen_state.next().ok_or("fen string is empty")?;
-    let (bb_sides, bb_pieces, board) = parse_fen_board(fen_board)?;
+    let (bb_sides, bb_pieces, board, score) = parse_fen_board(fen_board)?;
 
     let fen_side_to_move = fen_state.next().ok_or("fen string is missing fields")?;
     let side_map: HashMap<&str, Side> = HashMap::from([("w", Side::White), ("b", Side::Black)]);
@@ -47,7 +47,7 @@ pub fn load_fen(fen: &str) -> Result<(Position, State), String> {
         Err(_) => return Err("fullmoves is not a number".to_string()),
     };
 
-    let position = Position::new(bb_sides, bb_pieces, board);
+    let position = Position::new(bb_sides, bb_pieces, board, score);
     Ok((
         position,
         State::new(
@@ -61,7 +61,9 @@ pub fn load_fen(fen: &str) -> Result<(Position, State), String> {
     ))
 }
 
-fn parse_fen_board(fen_board: &str) -> Result<([BB; 2], [BB; 6], [Option<Piece>; 64]), String> {
+fn parse_fen_board(
+    fen_board: &str,
+) -> Result<([BB; 2], [BB; 6], [Option<Piece>; 64], [u32; 2]), String> {
     let mut bb_pieces = [
         bitboard::EMPTY,
         bitboard::EMPTY,
@@ -73,6 +75,7 @@ fn parse_fen_board(fen_board: &str) -> Result<([BB; 2], [BB; 6], [Option<Piece>;
 
     let mut bb_sides = [bitboard::EMPTY, bitboard::EMPTY];
     let mut board: [Option<Piece>; 64] = [None; 64];
+    let mut score: [u32; 2] = [0; 2];
 
     let mut rank = 7;
     let mut file = 0;
@@ -112,10 +115,12 @@ fn parse_fen_board(fen_board: &str) -> Result<([BB; 2], [BB; 6], [Option<Piece>;
 
         board[sq.to_usize()] = Some(Piece::new(side, piece_type));
 
+        score[side.to_usize()] += piece_type.score();
+
         file += 1;
     }
 
-    Ok((bb_sides, bb_pieces, board))
+    Ok((bb_sides, bb_pieces, board, score))
 }
 
 fn parse_fen_castle(fen_castle: &str) -> Result<CastleRights, String> {

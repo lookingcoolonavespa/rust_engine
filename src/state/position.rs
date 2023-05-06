@@ -13,13 +13,20 @@ pub struct Position {
     bb_sides: [BB; 2],
     bb_pieces: [BB; 6],
     board: [Option<Piece>; 64],
+    score: [u32; 2],
 }
 impl Position {
-    pub fn new(bb_sides: [BB; 2], bb_pieces: [BB; 6], board: [Option<Piece>; 64]) -> Position {
+    pub fn new(
+        bb_sides: [BB; 2],
+        bb_pieces: [BB; 6],
+        board: [Option<Piece>; 64],
+        score: [u32; 2],
+    ) -> Position {
         Position {
             bb_sides,
             bb_pieces,
             board,
+            score,
         }
     }
 
@@ -51,6 +58,10 @@ impl Position {
         self.bb_pieces[piece_type.to_usize()] & self.bb_sides[side.to_usize()]
     }
 
+    pub fn score(&self, side: Side) -> u32 {
+        self.score[side.to_usize()]
+    }
+
     pub fn bb_sliders(&self, side: Side) -> (BB, BB) {
         let queens = self.bb_pc(PieceType::Queen, side);
         let rooks = self.bb_pc(PieceType::Rook, side);
@@ -69,6 +80,8 @@ impl Position {
         self.bb_sides[side.to_usize()] ^= from_bb;
 
         self.board[from.to_usize()] = None;
+
+        self.score[side.to_usize()] -= piece_type.score();
     }
 
     pub fn remove_at(&mut self, sq: Square) -> Option<Piece> {
@@ -87,6 +100,8 @@ impl Position {
         self.bb_sides[side.to_usize()] |= to_bb;
 
         self.board[to.to_usize()] = Some(Piece::new(side, piece_type));
+
+        self.score[side.to_usize()] += piece_type.score();
     }
 
     pub fn move_piece(&mut self, piece_type: PieceType, from: Square, to: Square, side: Side) {
