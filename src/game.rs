@@ -34,6 +34,8 @@ impl Game {
         Ok(Game { position, state })
     }
 
+    // pub fn to_fen(&self) -> String {}
+
     pub fn state(&self) -> &State {
         &self.state
     }

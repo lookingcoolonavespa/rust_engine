@@ -4,15 +4,18 @@ use crate::{
     fen::STARTING_POSITION_FEN,
     game::Game,
     move_gen::pseudo_legal::is_double_pawn_push,
-    mv::{castle::Castle, EncodedMove, Move, PromotionMove},
+    mv::{castle::Castle, Decode, EncodedMove, Move, PromotionMove},
     perft::count_moves_debug,
     piece_type::{PieceType, PromoteType},
+    search::MoveFinder,
+    side::Side,
     square::{self, Square},
 };
 
 pub fn main() {
     let mut game = Game::from_fen(STARTING_POSITION_FEN)
         .expect("game is not loading the starting position fen correctly");
+    let mut mv_finder = MoveFinder::new(game.clone());
 
     loop {
         let mut input_str = String::new();
@@ -21,7 +24,7 @@ pub fn main() {
             .expect("failed to read line");
 
         match input_str.trim() {
-            "com/crochess/engine0x88/uci" => {
+            "uci" => {
                 input_uci();
             }
             "isready" => {
@@ -29,13 +32,15 @@ pub fn main() {
             }
             "ucinewgame" => {
                 game = input_uci_new_game();
+                mv_finder = mv_finder.set_game(game.clone());
             }
             input if input.starts_with("position") => {
-                game = input_position(&input_str, game.clone());
+                game = input_position(&input_str, game);
+                mv_finder = mv_finder.set_game(game.clone());
             }
             input if input.starts_with("go perft") => input_perft(&input_str, &mut game),
-            // input if input.starts_with("go") => input_go(),
-            // "quit:" => input_quit(),
+            input if input.starts_with("go") => input_go(&mut game, &mut mv_finder),
+            "quit:" => input_quit(),
             "print" => print(&game),
             _ => {
                 println!("Invalid input: {}", input_str);
@@ -56,7 +61,7 @@ fn input_is_ready() {
 }
 
 fn input_uci_new_game() -> Game {
-    Game::from_fen("STARTING_POSITION_FEN").unwrap()
+    Game::from_fen(STARTING_POSITION_FEN).unwrap()
 }
 
 fn input_quit() {
@@ -503,35 +508,90 @@ pub mod test_input_position {
     }
 }
 
-// fn move_to_algebra(mv: i32) -> String {
-//     let from = Square::lookup((mv >> 7) & 127);
-//     let to = Square::lookup(mv & 127);
-//     let promote = mv >> 18;
-//
-//     let mut algebra = format!(
-//         "{}{}",
-//         from.to_string().to_lowercase(),
-//         to.to_string().to_lowercase()
-//     );
-//     if promote != 0 {
-//         let mut abbr_map = HashMap::new();
-//         abbr_map.insert(5, 'q');
-//         abbr_map.insert(4, 'r');
-//         abbr_map.insert(2, 'n');
-//         abbr_map.insert(3, 'b');
-//
-//         algebra.push(abbr_map.get(&promote).unwrap());
-//     }
-//
-//     algebra
-// }
+fn move_to_algebra(mv: Move, side: Side) -> String {
+    match mv {
+        Move::King(mv)
+        | Move::Rook(mv)
+        | Move::Pawn(mv)
+        | Move::DoublePawnPush(mv)
+        | Move::Piece(mv)
+        | Move::EnPassant(mv) => {
+            let (from, to) = mv.decode_into_squares();
+            format!(
+                "{}{}",
+                from.to_string().to_lowercase(),
+                to.to_string().to_lowercase()
+            )
+        }
+        Move::Castle(castle_mv) => {
+            let (from, to) = castle_mv.king_squares(side);
+            format!(
+                "{}{}",
+                from.to_string().to_lowercase(),
+                to.to_string().to_lowercase()
+            )
+        }
+        Move::Promotion(promotion_mv) => {
+            let (from, to) = promotion_mv.decode_into_squares();
+            let promote_type_char = promotion_mv.promote_piece_type().to_char();
+            format!(
+                "{}{}{}",
+                from.to_string().to_lowercase(),
+                to.to_string().to_lowercase(),
+                promote_type_char.to_string().to_lowercase()
+            )
+        }
+    }
+}
 
-// fn input_go() {
-//     // search for best move
-//     let best_move = MoveEval::get_best_move(5);
-//     let algebra = move_to_algebra(best_move);
-//     println!("bestmove {}", algebra);
-// }
+#[cfg(test)]
+pub mod test_move_to_algebra {
+    use super::*;
+    use crate::square::*;
+
+    #[test]
+    fn regular_move() {
+        let mv = Move::Piece(EncodedMove::new(A4, A5, PieceType::Pawn, false));
+        assert_eq!(move_to_algebra(mv, Side::White), "a4a5")
+    }
+
+    #[test]
+    fn promotion_move() {
+        let mv = Move::Promotion(PromotionMove::new(A7, A8, &PromoteType::Queen, false));
+        assert_eq!(move_to_algebra(mv, Side::White), "a7a8q")
+    }
+
+    #[test]
+    fn castle_move_1() {
+        let mv = Move::Castle(Castle::Kingside);
+        assert_eq!(move_to_algebra(mv, Side::White), "e1g1")
+    }
+
+    #[test]
+    fn castle_move_2() {
+        let mv = Move::Castle(Castle::Queenside);
+        assert_eq!(move_to_algebra(mv, Side::White), "e1c1")
+    }
+
+    #[test]
+    fn castle_move_3() {
+        let mv = Move::Castle(Castle::Kingside);
+        assert_eq!(move_to_algebra(mv, Side::Black), "e8g8")
+    }
+
+    #[test]
+    fn castle_move_4() {
+        let mv = Move::Castle(Castle::Queenside);
+        assert_eq!(move_to_algebra(mv, Side::Black), "e8c8")
+    }
+}
+
+fn input_go(game: &mut Game, mv_finder: &mut MoveFinder) {
+    // search for best move
+    let (best_move, _) = mv_finder.get().unwrap();
+    let algebra = move_to_algebra(best_move, game.state().side_to_move());
+    println!("bestmove {}", algebra);
+}
 
 fn print(game: &Game) {
     println!("{}", game.position());

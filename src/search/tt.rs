@@ -98,12 +98,14 @@ impl TranspositionTable {
                 }
                 TtFlag::Alpha => {
                     if entry.eval <= alpha {
-                        return Some(alpha);
+                        // evaluation of the position is smaller than the value of entry.eval
+                        return Some(entry.eval);
                     }
                 }
                 TtFlag::Beta => {
+                    // evaluation of the position is at least the value of entry.eval
                     if entry.eval >= beta {
-                        return Some(beta);
+                        return Some(entry.eval);
                     }
                 }
             }
@@ -118,7 +120,7 @@ impl TranspositionTable {
         if let Some(entry) = entry_result {
             if zobrist != entry.zobrist
                 || depth > entry.depth
-                || !matches!(entry.flag, TtFlag::Exact)
+                || !matches!(entry.flag, TtFlag::Exact | TtFlag::Beta)
             {
                 return None;
             }

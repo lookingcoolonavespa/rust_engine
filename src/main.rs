@@ -1,8 +1,8 @@
 #[cfg(test)]
 extern crate unindent;
 
-mod attack_table;
 mod bitboard;
+mod eval;
 mod fen;
 mod game;
 mod move_gen;
@@ -11,6 +11,7 @@ mod mv;
 mod perft;
 mod piece;
 mod piece_type;
+mod search;
 mod side;
 mod square;
 mod state;
