@@ -574,6 +574,7 @@ impl Game {
                 legal_check_preprocessing.controlled_squares_with_king_gone_bb(),
                 legal_check_preprocessing.checkers(),
             ),
+            Move::Null() => true,
         }
     }
 
@@ -773,6 +774,7 @@ impl Game {
 
                 capture
             }
+            Move::Null() => None,
         };
 
         if !matches!(mv, Move::DoublePawnPush(_)) {
@@ -887,6 +889,7 @@ impl Game {
             Move::EnPassant(en_passant_mv) => {
                 self.unmake_en_passant_move(en_passant_mv, side);
             }
+            Move::Null() => {}
         };
     }
 
@@ -906,6 +909,7 @@ impl Game {
 
         let escape_moves = self.pseudo_legal_escape_moves(side, legal_check_preprocessing);
         let escape_moves_iter = escape_moves
+            .list()
             .iter()
             .filter(|mv| self.is_legal(**mv, legal_check_preprocessing));
 
@@ -1368,33 +1372,20 @@ pub mod test_pseudo_legal {
             ("castle", 0),
             ("promotion", 0),
             ("en passant", 0),
+            ("null", 0),
         ]);
 
-        for mv in mv_list.iter() {
-            let key_to_update;
-            match mv {
-                Move::King(_) => {
-                    key_to_update = "king";
-                }
-                Move::Rook(_) => {
-                    key_to_update = "rook";
-                }
-                Move::Pawn(_) => {
-                    key_to_update = "pawn";
-                }
-                Move::DoublePawnPush(_) => {
-                    key_to_update = "double pawn push";
-                }
-                Move::Piece(_) => {
-                    key_to_update = "piece";
-                }
-                Move::Castle(_) => {
-                    key_to_update = "castle";
-                }
-                Move::Promotion(_) => {
-                    key_to_update = "promotion";
-                }
-                Move::EnPassant(_) => key_to_update = "en passant",
+        for mv in mv_list.list().iter() {
+            let key_to_update = match mv {
+                Move::King(_) => "king",
+                Move::Rook(_) => "rook",
+                Move::Pawn(_) => "pawn",
+                Move::DoublePawnPush(_) => "double pawn push",
+                Move::Piece(_) => "piece",
+                Move::Castle(_) => "castle",
+                Move::Promotion(_) => "promotion",
+                Move::EnPassant(_) => "en passant",
+                Move::Null() => "null",
             };
 
             if let Some(x) = mv_counter.get_mut(key_to_update) {
@@ -1442,7 +1433,7 @@ pub mod test_is_legal {
 
         let prev_state = game.state.encode();
 
-        for mv in mv_list.iter() {
+        for mv in mv_list.list().iter() {
             if game.is_legal(*mv, &legal_check_preprocessing) {
                 let capture = game.make_move(*mv);
                 assert!(
@@ -3007,7 +2998,7 @@ pub mod test_escape_moves {
             bitboard::EMPTY,
         ];
 
-        for mv in escape_mv_list.iter() {
+        for mv in escape_mv_list.list().iter() {
             match mv {
                 Move::King(king_mv) => {
                     let (_, to) = king_mv.decode_into_squares();
@@ -3041,6 +3032,7 @@ pub mod test_escape_moves {
                     let (_, to_bb) = pawn_mv.decode_into_bb();
                     moves_bb_arr[PieceType::Pawn.to_usize()] |= to_bb;
                 }
+                Move::Null() => {}
             }
         }
 
@@ -3165,7 +3157,7 @@ pub mod test_loud_moves {
             bitboard::EMPTY,
         ];
 
-        for mv in loud_mv_list.iter() {
+        for mv in loud_mv_list.list().iter() {
             match mv {
                 Move::King(king_mv) => {
                     let (_, to) = king_mv.decode_into_squares();
@@ -3199,6 +3191,7 @@ pub mod test_loud_moves {
                     let (_, to_bb) = pawn_mv.decode_into_bb();
                     moves_bb_arr[PieceType::Pawn.to_usize()] |= to_bb;
                 }
+                Move::Null() => {}
             }
         }
 

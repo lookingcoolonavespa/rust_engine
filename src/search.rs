@@ -2,7 +2,9 @@ use crate::{
     eval::{eval, CHECKMATE_VAL, DRAW_VAL},
     game::Game,
     move_gen::check_legal::LegalCheckPreprocessing,
-    mv::Move,
+    move_list::MoveList,
+    mv::{Decode, Move},
+    piece_type::PieceType,
     side::Side,
 };
 
@@ -11,12 +13,21 @@ use self::tt::{TranspositionTable, TtFlag};
 mod tt;
 
 const SEARCH_DEPTH: u8 = 6;
-const MAX_DEPTH: u8 = 17;
+const MAX_DEPTH: u8 = 12;
+
+const MVV_LVA: [[u8; 6]; 6] = [
+    [15, 14, 13, 12, 11, 10], // victim P, attacker none, p, n , b, r, q, k
+    [25, 24, 23, 22, 21, 20], // victim N, attacker none, p, n , b, r, q, k
+    [35, 34, 33, 32, 31, 30], // victim B, attacker none, p, n , b, r, q, k
+    [45, 44, 43, 42, 41, 40], // victim R, attacker none, p, n , b, r, q, k
+    [55, 54, 53, 52, 51, 50], // victim Q, attacker none, p, n , b, r, q, k
+    [0, 0, 0, 0, 0, 0],       // victim K, attacker none, p, n , b, r, q, k
+];
+
+const TT_MOVE_SORT_VAL: u8 = 60;
 
 pub struct MoveFinder {
     tt: TranspositionTable,
-    max_depth: u8,
-    search_depth: u8,
     game: Game,
 }
 
@@ -25,18 +36,94 @@ impl MoveFinder {
         MoveFinder {
             game,
             tt: TranspositionTable::new(),
-            max_depth: MAX_DEPTH,
-            search_depth: SEARCH_DEPTH,
         }
     }
 
     pub fn set_game(self, game: Game) -> MoveFinder {
-        MoveFinder {
-            game,
-            tt: self.tt,
-            max_depth: self.max_depth,
-            search_depth: self.search_depth,
+        MoveFinder { game, tt: self.tt }
+    }
+
+    pub fn score_moves(&self, game: &Game, mv_list: &MoveList, tt_mv: Move) -> Vec<u8> {
+        let mut scores = vec![0; mv_list.list().len()];
+
+        for (i, mv) in mv_list.list().iter().enumerate() {
+            if *mv == tt_mv {
+                scores[i] = TT_MOVE_SORT_VAL;
+            } else {
+                match mv {
+                    Move::King(mv) | Move::Rook(mv) | Move::Pawn(mv) | Move::Piece(mv) => {
+                        if mv.is_capture() {
+                            let (_, to) = mv.decode_into_squares();
+                            debug_assert!(
+                                game.position().at(to).is_some(),
+                                "move is capture but no piece found on {}",
+                                to
+                            );
+                            let attacker = mv.piece_type();
+                            let capture = game.position().at(to).unwrap().piece_type();
+
+                            scores[i] = MVV_LVA[capture.to_usize()][attacker.to_usize()];
+                        }
+                    }
+                    Move::EnPassant(_) => {
+                        scores[i] = MVV_LVA[PieceType::Pawn.to_usize()][PieceType::Pawn.to_usize()];
+                    }
+                    Move::Promotion(promote_mv) => {
+                        // using mvv lva array to get difference of value between
+                        // the promote piece type and the pawn
+                        if promote_mv.is_capture() {
+                            let (_, to) = promote_mv.decode_into_squares();
+                            debug_assert!(
+                                game.position().at(to).is_some(),
+                                "move is capture but no piece found on {}",
+                                to
+                            );
+                            let capture = game.position().at(to).unwrap().piece_type();
+                            scores[i] = MVV_LVA[promote_mv.promote_piece_type().to_usize()]
+                                [PieceType::Pawn.to_usize()]
+                                + MVV_LVA[capture.to_usize()][PieceType::Pawn.to_usize()]
+                        } else {
+                            scores[i] = MVV_LVA[promote_mv.promote_piece_type().to_usize()]
+                                [PieceType::Pawn.to_usize()]
+                        }
+                    }
+                    Move::DoublePawnPush(_) | Move::Castle(_) => {}
+                    Move::Null() => panic!("null move encountered in move list"),
+                }
+            }
         }
+
+        scores
+    }
+
+    pub fn pick_move(
+        &self,
+        mv_list: &mut MoveList,
+        scores: &mut Vec<u8>,
+        start_idx: usize,
+    ) -> Move {
+        // finds the move with the highest score and swaps it with the item at start idx
+
+        let mut best_score = scores[start_idx];
+        let mut best_score_idx = start_idx;
+
+        for (i, score) in scores.iter().enumerate() {
+            let score = *score;
+            if score > best_score {
+                best_score = score;
+                best_score_idx = i;
+            }
+        }
+
+        scores.swap(start_idx, best_score_idx);
+        mv_list.mut_list().swap(start_idx, best_score_idx);
+
+        debug_assert!(
+            mv_list.list().get(best_score_idx).is_some(),
+            "there is no move at idx {} in the move list",
+            best_score_idx
+        );
+        *mv_list.list().get(best_score_idx).unwrap()
     }
 
     pub fn get(&mut self) -> Option<(Move, i32)> {
@@ -50,19 +137,24 @@ impl MoveFinder {
         let stm = self.game.state().side_to_move();
 
         let legal_check_preprocessing = LegalCheckPreprocessing::from(&mut self.game, stm);
-        let pseudo_legal_mv_list = if legal_check_preprocessing.num_of_checkers() == 0 {
+        let mut pseudo_legal_mv_list = if legal_check_preprocessing.num_of_checkers() == 0 {
             self.game.pseudo_legal_moves(stm)
         } else {
             self.game
                 .pseudo_legal_escape_moves(stm, &legal_check_preprocessing)
         };
 
-        // let tt_move_result = self
-        //     .tt
-        //     .prove_move(self.game.state().zobrist().to_u64(), self.search_depth);
+        let tt_mv_result = self
+            .tt
+            .probe_move(self.game.state().zobrist().to_u64(), SEARCH_DEPTH);
+        let mut scores = self.score_moves(
+            &self.game,
+            &pseudo_legal_mv_list,
+            tt_mv_result.unwrap_or(Move::Null()),
+        );
 
-        for mv in pseudo_legal_mv_list.iter() {
-            let mv = *mv;
+        for i in 0..pseudo_legal_mv_list.list().len() {
+            let mv = self.pick_move(&mut pseudo_legal_mv_list, &mut scores, i);
             if !self.game.is_legal(mv, &legal_check_preprocessing) {
                 continue;
             }
@@ -74,12 +166,12 @@ impl MoveFinder {
             let eval: i32 = if self.game.is_draw() {
                 DRAW_VAL
             } else {
-                let tt_val_result = self.tt.probe_val(zobrist, self.search_depth, alpha, beta);
+                let tt_val_result = self.tt.probe_val(zobrist, SEARCH_DEPTH, alpha, beta);
 
                 if let Some(tt_val) = tt_val_result {
                     tt_val
                 } else {
-                    -self.alpha_beta(self.search_depth - 1, -beta, -alpha, 1)
+                    -self.alpha_beta(SEARCH_DEPTH - 1, -beta, -alpha, 1)
                 }
             };
 
@@ -87,11 +179,11 @@ impl MoveFinder {
                 alpha = eval;
                 best_move = Some(mv);
                 self.tt
-                    .store(zobrist, self.search_depth, TtFlag::Exact, eval, Some(mv));
+                    .store(zobrist, SEARCH_DEPTH, TtFlag::Exact, eval, Some(mv));
             } else {
                 // store lower bound
                 self.tt
-                    .store(zobrist, self.search_depth, TtFlag::Alpha, eval, None);
+                    .store(zobrist, SEARCH_DEPTH, TtFlag::Alpha, eval, None);
             }
 
             self.game.unmake_move(mv, capture, prev_state);
@@ -99,7 +191,7 @@ impl MoveFinder {
 
         self.tt.store(
             self.game.state().zobrist().to_u64(),
-            self.search_depth,
+            SEARCH_DEPTH,
             TtFlag::Exact,
             alpha,
             best_move,
@@ -127,19 +219,28 @@ impl MoveFinder {
         let stm = self.game.state().side_to_move();
 
         let legal_check_preprocessing = LegalCheckPreprocessing::from(&mut self.game, stm);
-        let pseudo_legal_mv_list = if legal_check_preprocessing.num_of_checkers() == 0 {
+        let mut pseudo_legal_mv_list = if legal_check_preprocessing.num_of_checkers() == 0 {
             self.game.pseudo_legal_moves(stm)
         } else {
             self.game
                 .pseudo_legal_escape_moves(stm, &legal_check_preprocessing)
         };
 
+        let tt_mv_result = self
+            .tt
+            .probe_move(self.game.state().zobrist().to_u64(), depth);
+        let mut scores = self.score_moves(
+            &self.game,
+            &pseudo_legal_mv_list,
+            tt_mv_result.unwrap_or(Move::Null()),
+        );
+
         let mut legal_moves_available = false;
 
-        for mv in pseudo_legal_mv_list.iter() {
+        for i in 0..pseudo_legal_mv_list.list().len() {
             legal_moves_available = true;
 
-            let mv = *mv;
+            let mv = self.pick_move(&mut pseudo_legal_mv_list, &mut scores, i);
             if !self.game.is_legal(mv, &legal_check_preprocessing) {
                 continue;
             }
@@ -151,7 +252,7 @@ impl MoveFinder {
             let eval: i32 = if self.game.is_draw() {
                 DRAW_VAL
             } else {
-                let tt_val_result = self.tt.probe_val(zobrist, self.search_depth, alpha, beta);
+                let tt_val_result = self.tt.probe_val(zobrist, depth, alpha, beta);
 
                 if let Some(tt_val) = tt_val_result {
                     tt_val
@@ -179,7 +280,7 @@ impl MoveFinder {
             self.game.unmake_move(mv, capture, prev_state);
         }
 
-        if !legal_moves_available && legal_check_preprocessing.num_of_checkers() > 0 {
+        if !legal_moves_available && legal_check_preprocessing.in_check() {
             return -CHECKMATE_VAL + levels_searched as i32;
         } else if !legal_moves_available && DRAW_VAL > alpha {
             // is a stalemate
@@ -193,18 +294,24 @@ impl MoveFinder {
         let stm = self.game.state().side_to_move();
         let legal_check_preprocessing = LegalCheckPreprocessing::from(&mut self.game, stm);
 
-        if levels_searched == self.max_depth {
+        if levels_searched == MAX_DEPTH {
             return eval(&mut self.game, &legal_check_preprocessing, levels_searched);
         }
 
-        if legal_check_preprocessing.num_of_checkers() > 0 {
+        if legal_check_preprocessing.in_check() {
             // need to reverse beta and alpha bc the eval stored is from the eyes of
             // the opposing side
             // go back to alpha_beta to generate escape moves
-            return self.alpha_beta(1, alpha, beta, levels_searched);
-        }
+            let tt_val_result =
+                self.tt
+                    .probe_val(self.game.state().zobrist().to_u64(), 0, alpha, beta);
 
-        let pseudo_legal_mv_list = self.game.pseudo_legal_loud_moves(stm);
+            if let Some(tt_val) = tt_val_result {
+                return tt_val;
+            } else {
+                return self.alpha_beta(1, alpha, beta, levels_searched);
+            }
+        }
 
         let stand_pat = eval(&mut self.game, &legal_check_preprocessing, levels_searched);
         if stand_pat >= beta {
@@ -214,8 +321,17 @@ impl MoveFinder {
             alpha = stand_pat;
         }
 
-        for mv in pseudo_legal_mv_list.iter() {
-            let mv = *mv;
+        let mut pseudo_legal_mv_list = self.game.pseudo_legal_loud_moves(stm);
+
+        let tt_mv_result = self.tt.probe_move(self.game.state().zobrist().to_u64(), 0);
+        let mut scores = self.score_moves(
+            &self.game,
+            &pseudo_legal_mv_list,
+            tt_mv_result.unwrap_or(Move::Null()),
+        );
+
+        for i in 0..pseudo_legal_mv_list.list().len() {
+            let mv = self.pick_move(&mut pseudo_legal_mv_list, &mut scores, i);
             if !self.game.is_legal(mv, &legal_check_preprocessing) {
                 continue;
             }
@@ -223,7 +339,19 @@ impl MoveFinder {
             let prev_state = self.game.state().encode();
             let capture = self.game.make_move(mv);
 
-            let eval = -self.quiescence(-beta, -alpha, levels_searched + 1);
+            let eval: i32 = if self.game.is_draw() {
+                DRAW_VAL
+            } else {
+                let tt_val_result =
+                    self.tt
+                        .probe_val(self.game.state().zobrist().to_u64(), 0, alpha, beta);
+
+                if let Some(tt_val) = tt_val_result {
+                    tt_val
+                } else {
+                    -self.quiescence(-beta, -alpha, levels_searched + 1)
+                }
+            };
 
             if eval >= beta {
                 self.game.unmake_move(mv, capture, prev_state);

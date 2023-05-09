@@ -27,7 +27,7 @@ pub fn count_moves_debug(depth: u32, game: &mut Game) -> u32 {
 
     let prev_state = game.state().encode();
 
-    for mv in pseudo_legal_mv_list.iter() {
+    for mv in pseudo_legal_mv_list.list().iter() {
         if !game.is_legal(*mv, &legal_check_preprocessing) {
             continue;
         }
@@ -64,7 +64,7 @@ fn count_moves(depth: u32, game: &mut Game) -> u32 {
     );
     let prev_state = game.state().encode();
 
-    for mv in pseudo_legal_mv_list.iter() {
+    for mv in pseudo_legal_mv_list.list().iter() {
         if !game.is_legal(*mv, &legal_check_preprocessing) {
             continue;
         }
@@ -352,7 +352,7 @@ pub mod perft_promotion {
 
         let mv_list = game.pseudo_legal_moves(game.state().side_to_move());
 
-        for mv in mv_list.iter() {
+        for mv in mv_list.list().iter() {
             assert!(!matches!(mv, Move::Castle(_)))
         }
     }

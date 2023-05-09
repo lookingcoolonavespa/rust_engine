@@ -1,7 +1,7 @@
 use crate::{
     bitboard::{self, squares_between::bb_squares_between, BB},
     game::Game,
-    mv::{castle::Castle, Decode, EncodedMove},
+    mv::{castle::Castle, Decode},
     side::Side,
     square::Square,
     state::position::Position,
@@ -62,6 +62,10 @@ impl LegalCheckPreprocessing {
 
     pub fn num_of_checkers(&self) -> u32 {
         self.checkers().count_ones()
+    }
+
+    pub fn in_check(&self) -> bool {
+        self.num_of_checkers() > 0
     }
 }
 
@@ -296,7 +300,7 @@ pub mod test_is_pinned_move_legal {
         illegal_move_list.insert_moves(from, illegal_moves_bb, cb);
 
         let king_sq = game.position().king_sq(side);
-        for legal_mv in legal_move_list.iter() {
+        for legal_mv in legal_move_list.list().iter() {
             match legal_mv {
                 Move::Piece(mv) => {
                     let (from_sq, to_sq) = mv.decode_into_squares();
@@ -307,7 +311,7 @@ pub mod test_is_pinned_move_legal {
                 }
             }
         }
-        for illegal_mv in illegal_move_list.iter() {
+        for illegal_mv in illegal_move_list.list().iter() {
             match illegal_mv {
                 Move::Piece(mv) => {
                     let (from_sq, to_sq) = mv.decode_into_squares();
@@ -353,7 +357,7 @@ pub mod test_is_pinned_move_legal {
         illegal_move_list.insert_moves(from, illegal_moves_bb, cb);
 
         let king_sq = game.position().king_sq(side);
-        for legal_mv in legal_move_list.iter() {
+        for legal_mv in legal_move_list.list().iter() {
             match legal_mv {
                 Move::Piece(mv) => {
                     let (from_sq, to_sq) = mv.decode_into_squares();
@@ -362,7 +366,7 @@ pub mod test_is_pinned_move_legal {
                 _ => {}
             }
         }
-        for illegal_mv in illegal_move_list.iter() {
+        for illegal_mv in illegal_move_list.list().iter() {
             match illegal_mv {
                 Move::Piece(mv) => {
                     let (from_sq, to_sq) = mv.decode_into_squares();

@@ -7,8 +7,11 @@ impl MoveList {
         MoveList(Vec::with_capacity(60))
     }
 
-    pub fn iter(&self) -> std::slice::Iter<Move> {
-        self.0.iter()
+    pub fn mut_list(&mut self) -> &mut Vec<Move> {
+        &mut self.0
+    }
+    pub fn list(&self) -> &Vec<Move> {
+        &self.0
     }
 
     pub fn insert_moves<F: Fn(Square, Square) -> Move>(

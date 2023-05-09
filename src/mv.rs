@@ -25,6 +25,7 @@ pub enum Move {
     Castle(Castle),
     Promotion(PromotionMove),
     EnPassant(EncodedMove),
+    Null(),
 }
 
 impl fmt::Display for Move {
@@ -46,6 +47,9 @@ impl fmt::Display for Move {
 
             Move::Promotion(promotion_mv) => {
                 write!(f, "{}", promotion_mv)
+            }
+            Move::Null() => {
+                write!(f, "null move")
             }
         }
     }
