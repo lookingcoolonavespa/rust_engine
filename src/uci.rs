@@ -40,7 +40,7 @@ pub fn main() {
             }
             input if input.starts_with("go perft") => input_perft(&input_str, &mut game),
             input if input.starts_with("go") => input_go(&mut game, &mut mv_finder),
-            "quit:" => input_quit(),
+            "quit" => input_quit(),
             "print" => print(&game),
             _ => {
                 println!("Invalid input: {}", input_str);
