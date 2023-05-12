@@ -461,6 +461,7 @@ pub mod test_basic_tactics {
             best_move, eval, expected_eval
         );
         assert_eq!(expected_eval, eval,);
+        assert_eq!(best_move.to_string(), "b3a4");
     }
 
     #[test]
