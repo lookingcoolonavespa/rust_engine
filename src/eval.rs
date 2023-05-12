@@ -24,3 +24,24 @@ pub fn eval(
 
     score
 }
+
+#[cfg(test)]
+pub mod test_eval {
+    use crate::piece_type::PieceType;
+
+    use super::*;
+
+    #[test]
+    fn pos_1() {
+        let fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RN1QKBNR w KQkq - 0 1";
+        let result = Game::from_fen(fen);
+        assert!(result.is_ok());
+        let mut game = result.unwrap();
+        let side = game.state().side_to_move();
+        let legal_check_preprocessing = LegalCheckPreprocessing::from(&mut game, side);
+
+        let eval = eval(&mut game, &legal_check_preprocessing, 0);
+
+        assert_eq!(eval, -(PieceType::Bishop.score() as i32));
+    }
+}

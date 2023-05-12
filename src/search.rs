@@ -118,11 +118,6 @@ impl MoveFinder {
         scores.swap(start_idx, best_score_idx);
         mv_list.mut_list().swap(start_idx, best_score_idx);
 
-        debug_assert!(
-            mv_list.list().get(best_score_idx).is_some(),
-            "there is no move at idx {} in the move list",
-            best_score_idx
-        );
         *mv_list.list().get(best_score_idx).unwrap()
     }
 
@@ -158,6 +153,7 @@ impl MoveFinder {
             if !self.game.is_legal(mv, &legal_check_preprocessing) {
                 continue;
             }
+            println!("alpha: {alpha}, mv: {mv}");
 
             let prev_state = self.game.state().encode();
             let capture = self.game.make_move(mv);
@@ -167,9 +163,9 @@ impl MoveFinder {
             } else {
                 let tt_val_result = self.tt.probe_val(
                     self.game.state().zobrist().to_u64(),
-                    SEARCH_DEPTH,
-                    alpha,
-                    beta,
+                    SEARCH_DEPTH - 1,
+                    -beta,
+                    -alpha,
                 );
 
                 if let Some(tt_val) = tt_val_result {
@@ -179,19 +175,11 @@ impl MoveFinder {
                 }
             };
 
-            let zobrist = self.game.state().zobrist().to_u64();
+            self.game.unmake_move(mv, capture, prev_state);
             if eval > alpha {
                 alpha = eval;
                 best_move = Some(mv);
-                self.tt
-                    .store(zobrist, SEARCH_DEPTH, TtFlag::Exact, eval, Some(mv));
-            } else {
-                // store lower bound
-                self.tt
-                    .store(zobrist, SEARCH_DEPTH, TtFlag::Alpha, eval, None);
             }
-
-            self.game.unmake_move(mv, capture, prev_state);
         }
 
         self.tt.store(
@@ -208,20 +196,24 @@ impl MoveFinder {
     }
 
     fn alpha_beta(&mut self, depth: u8, mut alpha: i32, beta: i32, levels_searched: u8) -> i32 {
-        if depth == 0 {
-            // need to reverse beta and alpha bc the eval stored is from the eyes of
-            // the opposing side
-            let tt_val_result =
-                self.tt
-                    .probe_val(self.game.state().zobrist().to_u64(), depth, -beta, -alpha);
-            return if let Some(tt_val) = tt_val_result {
-                tt_val
-            } else {
-                self.quiescence(alpha, beta, levels_searched)
-            };
-        };
+        // if depth == 0 {
+        //     // need to reverse beta and alpha bc the eval stored is from the eyes of
+        //     // the opposing side
+        //     let tt_val_result =
+        //         self.tt
+        //             .probe_val(self.game.state().zobrist().to_u64(), depth, -beta, -alpha);
+        //     return if let Some(tt_val) = tt_val_result {
+        //         tt_val
+        //     } else {
+        //         self.quiescence(alpha, beta, levels_searched)
+        //     };
+        // };
 
         let stm = self.game.state().side_to_move();
+        if depth == 0 {
+            let legal_check_preprocessing = &LegalCheckPreprocessing::from(&mut self.game, stm);
+            return eval(&mut self.game, legal_check_preprocessing, levels_searched);
+        }
 
         let legal_check_preprocessing = LegalCheckPreprocessing::from(&mut self.game, stm);
         let mut pseudo_legal_mv_list = if legal_check_preprocessing.in_check() {
@@ -253,11 +245,11 @@ impl MoveFinder {
             let prev_state = self.game.state().encode();
             let capture = self.game.make_move(mv);
 
-            let zobrist = self.game.state().zobrist().to_u64();
             let eval: i32 = if self.game.is_draw() {
                 DRAW_VAL
             } else {
-                let tt_val_result = self.tt.probe_val(zobrist, depth, alpha, beta);
+                let zobrist = self.game.state().zobrist().to_u64();
+                let tt_val_result = self.tt.probe_val(zobrist, depth - 1, -beta, -alpha);
 
                 if let Some(tt_val) = tt_val_result {
                     tt_val
@@ -266,10 +258,12 @@ impl MoveFinder {
                 }
             };
 
+            self.game.unmake_move(mv, capture, prev_state);
+
+            let zobrist = self.game.state().zobrist().to_u64();
             if eval >= beta {
                 // store upper bound for position
                 self.tt.store(zobrist, depth, TtFlag::Beta, eval, Some(mv));
-                self.game.unmake_move(mv, capture, prev_state);
                 return eval;
             }
 
@@ -281,8 +275,6 @@ impl MoveFinder {
                 // store lower bound
                 self.tt.store(zobrist, depth, TtFlag::Alpha, eval, None);
             }
-
-            self.game.unmake_move(mv, capture, prev_state);
         }
 
         if !legal_moves_available && legal_check_preprocessing.in_check() {
@@ -451,6 +443,7 @@ pub mod test_basic_tactics {
     fn debug_pos_1() {
         let mut game = Game::from_fen(STARTING_POSITION_FEN).unwrap();
         game = uci::input_position("position startpos moves e2e3 c7c6 c2c3 a7a5 a2a3 e7e6 d2d3 d7d6 g2g3 b7b6 f2f3 b6b5 e3e4 f7f6 b2b3 g7g6 h2h3 b8a6 a3a4 b5a4", game);
+        println!("{}", game.position());
         let mut mv_finder = MoveFinder::new(game.clone());
 
         let best_move_result = mv_finder.get();
@@ -463,11 +456,11 @@ pub mod test_basic_tactics {
             game.position().score(Side::White),
             game.position().score(Side::Black)
         );
-        assert_eq!(
-            expected_eval, eval,
+        println!(
             "\nbest move: {}; eval: {}\nexpected eval: {}",
             best_move, eval, expected_eval
         );
+        assert_eq!(expected_eval, eval,);
     }
 
     #[test]
@@ -480,7 +473,7 @@ pub mod test_basic_tactics {
         let mut mv_finder = MoveFinder::new(game.clone());
 
         let best_move_result = mv_finder.get();
-        let expected_eval = 0;
+        let expected_eval = 100;
 
         assert!(best_move_result.is_some());
         let (best_move, eval) = best_move_result.unwrap();
@@ -489,10 +482,12 @@ pub mod test_basic_tactics {
             game.position().score(Side::White),
             game.position().score(Side::Black)
         );
-        assert_eq!(
-            expected_eval, eval,
+        println!("{}", game.position());
+        println!(
             "\nbest move: {}; eval: {}\nexpected eval: {}",
             best_move, eval, expected_eval
         );
+        assert_eq!(best_move.to_string(), "c4b5");
+        assert_eq!(expected_eval, eval,);
     }
 }

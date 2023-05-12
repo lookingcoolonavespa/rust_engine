@@ -65,7 +65,7 @@ impl TranspositionTable {
 
         let entry_result = self.map.get_mut(&key);
         if let Some(entry) = entry_result {
-            if self.age > entry.age || depth > entry.depth {
+            if self.age > entry.age || depth >= entry.depth {
                 entry.replace(zobrist, depth, flag, eval, mv, self.age);
             }
         } else {

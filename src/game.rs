@@ -800,7 +800,7 @@ impl Game {
 
         if mv.is_capture() {
             let (capture_side, capture_pc) = capture
-                .expect("capture is true, but unmake function was not giving a Piece")
+                .expect("capture is true, but unmake function was not given a piece")
                 .decode();
             self.position.place_piece(capture_pc, to, capture_side);
             self.state
@@ -2314,6 +2314,25 @@ pub mod test_zobrist {
                 .expect("zobrist was not found in zobrist table"),
             &0u8
         )
+    }
+
+    #[test]
+    fn unmake_capture() {
+        let fen = "rnbqkbnr/ppp1pppp/8/3p4/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 1";
+        let result = Game::from_fen(fen);
+        assert!(result.is_ok());
+        let mut game = result.unwrap();
+        let from = E4;
+        let to = D5;
+
+        let mv = Move::Pawn(EncodedMove::new(from, to, PieceType::Pawn, true));
+        let prev_state = game.state().encode();
+
+        let zobrist = game.state.zobrist().clone();
+        let capture = game.make_move(mv);
+        game.unmake_move(mv, capture, prev_state);
+
+        assert_eq!(&zobrist, game.state().zobrist());
     }
 }
 
