@@ -107,8 +107,8 @@ impl MoveFinder {
         let mut best_score = scores[start_idx];
         let mut best_score_idx = start_idx;
 
-        for (i, score) in scores.iter().enumerate() {
-            let score = *score;
+        for i in start_idx..mv_list.list().len() {
+            let score = scores[i];
             if score > best_score {
                 best_score = score;
                 best_score_idx = i;
@@ -118,7 +118,7 @@ impl MoveFinder {
         scores.swap(start_idx, best_score_idx);
         mv_list.mut_list().swap(start_idx, best_score_idx);
 
-        *mv_list.list().get(best_score_idx).unwrap()
+        *mv_list.list().get(start_idx).unwrap()
     }
 
     pub fn get(&mut self) -> Option<(Move, i32)> {
@@ -169,7 +169,7 @@ impl MoveFinder {
                 );
 
                 if let Some(tt_val) = tt_val_result {
-                    tt_val
+                    -tt_val
                 } else {
                     -self.alpha_beta(SEARCH_DEPTH - 1, -beta, -alpha, 1)
                 }
@@ -252,7 +252,7 @@ impl MoveFinder {
                 let tt_val_result = self.tt.probe_val(zobrist, depth - 1, -beta, -alpha);
 
                 if let Some(tt_val) = tt_val_result {
-                    tt_val
+                    -tt_val
                 } else {
                     -self.alpha_beta(depth - 1, -beta, -alpha, levels_searched + 1)
                 }
