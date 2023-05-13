@@ -153,7 +153,6 @@ impl MoveFinder {
             if !self.game.is_legal(mv, &legal_check_preprocessing) {
                 continue;
             }
-            println!("alpha: {alpha}, mv: {mv}");
 
             let prev_state = self.game.state().encode();
             let capture = self.game.make_move(mv);
@@ -180,6 +179,7 @@ impl MoveFinder {
                 alpha = eval;
                 best_move = Some(mv);
             }
+            println!("alpha: {alpha}, mv: {mv}");
         }
 
         self.tt.store(
