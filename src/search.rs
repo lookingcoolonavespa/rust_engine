@@ -196,24 +196,20 @@ impl MoveFinder {
     }
 
     fn alpha_beta(&mut self, depth: u8, mut alpha: i32, beta: i32, levels_searched: u8) -> i32 {
-        // if depth == 0 {
-        //     // need to reverse beta and alpha bc the eval stored is from the eyes of
-        //     // the opposing side
-        //     let tt_val_result =
-        //         self.tt
-        //             .probe_val(self.game.state().zobrist().to_u64(), depth, -beta, -alpha);
-        //     return if let Some(tt_val) = tt_val_result {
-        //         tt_val
-        //     } else {
-        //         self.quiescence(alpha, beta, levels_searched)
-        //     };
-        // };
+        if depth == 0 {
+            // need to reverse beta and alpha bc the eval stored is from the eyes of
+            // the opposing side
+            let tt_val_result =
+                self.tt
+                    .probe_val(self.game.state().zobrist().to_u64(), depth, alpha, beta);
+            return if let Some(tt_val) = tt_val_result {
+                tt_val
+            } else {
+                self.quiescence(alpha, beta, levels_searched)
+            };
+        };
 
         let stm = self.game.state().side_to_move();
-        if depth == 0 {
-            let legal_check_preprocessing = &LegalCheckPreprocessing::from(&mut self.game, stm);
-            return eval(&mut self.game, legal_check_preprocessing, levels_searched);
-        }
 
         let legal_check_preprocessing = LegalCheckPreprocessing::from(&mut self.game, stm);
         let mut pseudo_legal_mv_list = if legal_check_preprocessing.in_check() {
@@ -248,8 +244,12 @@ impl MoveFinder {
             let eval: i32 = if self.game.is_draw() {
                 DRAW_VAL
             } else {
-                let zobrist = self.game.state().zobrist().to_u64();
-                let tt_val_result = self.tt.probe_val(zobrist, depth - 1, -beta, -alpha);
+                let tt_val_result = self.tt.probe_val(
+                    self.game.state().zobrist().to_u64(),
+                    depth - 1,
+                    -beta,
+                    -alpha,
+                );
 
                 if let Some(tt_val) = tt_val_result {
                     -tt_val
@@ -301,7 +301,7 @@ impl MoveFinder {
             // go back to alpha_beta to generate escape moves
             let tt_val_result =
                 self.tt
-                    .probe_val(self.game.state().zobrist().to_u64(), 0, -beta, -alpha);
+                    .probe_val(self.game.state().zobrist().to_u64(), 0, alpha, beta);
 
             if let Some(tt_val) = tt_val_result {
                 return tt_val;
@@ -341,20 +341,21 @@ impl MoveFinder {
             } else {
                 let tt_val_result =
                     self.tt
-                        .probe_val(self.game.state().zobrist().to_u64(), 0, alpha, beta);
+                        .probe_val(self.game.state().zobrist().to_u64(), 0, -beta, -alpha);
 
                 if let Some(tt_val) = tt_val_result {
-                    tt_val
+                    -tt_val
                 } else {
                     -self.quiescence(-beta, -alpha, levels_searched + 1)
                 }
             };
 
+            self.game.unmake_move(mv, capture, prev_state);
+
             let zobrist = self.game.state().zobrist().to_u64();
             if eval >= beta {
                 // store upper bound for position
                 self.tt.store(zobrist, 0, TtFlag::Beta, eval, Some(mv));
-                self.game.unmake_move(mv, capture, prev_state);
                 return eval;
             }
 
@@ -366,7 +367,6 @@ impl MoveFinder {
                 // store lower bound
                 self.tt.store(zobrist, 0, TtFlag::Alpha, eval, None);
             }
-            self.game.unmake_move(mv, capture, prev_state);
         }
 
         alpha
@@ -490,5 +490,28 @@ pub mod test_basic_tactics {
         );
         assert_eq!(best_move.to_string(), "c4b5");
         assert_eq!(expected_eval, eval,);
+    }
+
+    #[test]
+    fn debug_pos_3() {
+        let mut game = Game::from_fen(STARTING_POSITION_FEN).unwrap();
+        game = uci::input_position(
+            "position startpos moves a2a3 a7a5 b2b3 a5a4 b3a4 a8a4 c2c3 b7b5 d2d4 c7c6 e2e4 d7d5 e4d5 d8d5 h2h3 f7f6 h3h4 e7e6 b1d2 g7g6 h4h5 g6h5 h1h5 e6e5 f2f4 c8e6 d4e5 a4f4 e5f6 f4f5 h5f5 d5f5 g2g4 f5g4 d1g4 e6g4 c3c4 f8d6 f6f7 e8f7 g1e2 b5c4 d2c4 d6e7 a3a4 h7h5 c4e5 f7e6 e5g4 h5g4 a4a5 c6c5 a5a6",
+            game,
+        );
+        let mut mv_finder = MoveFinder::new(game.clone());
+
+        let best_move_result = mv_finder.get();
+
+        assert!(best_move_result.is_some());
+        let (best_move, eval) = best_move_result.unwrap();
+        println!(
+            "white score: {}, black score: {}",
+            game.position().score(Side::White),
+            game.position().score(Side::Black)
+        );
+        println!("{}", game.position());
+        println!("\nbest move: {}; eval: {}", best_move, eval);
+        assert_ne!(best_move.to_string(), "g8h6");
     }
 }
