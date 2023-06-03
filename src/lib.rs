@@ -7,13 +7,16 @@ mod move_gen;
 mod move_list;
 mod mv;
 mod perft;
+mod phase;
 mod piece;
 mod piece_type;
+mod psqt;
+mod score;
 mod search;
 mod side;
 mod square;
 mod state;
-mod uci;
+pub mod uci;
 mod util;
 
 #[cfg(test)]

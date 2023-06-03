@@ -1,6 +1,6 @@
 use core::fmt;
 
-use crate::bitboard::{BB, BISHOP_RAYS, FILE_A, KNIGHT_JUMPS, ROOK_RAYS, ROW_1};
+use crate::bitboard::{BB, BISHOP_RAYS, FILE_A, FILE_H, KNIGHT_JUMPS, ROOK_RAYS, ROW_1};
 
 pub type Internal = usize;
 
@@ -60,6 +60,14 @@ impl Square {
         FILE_A << (self.0 & 7)
     }
 
+    pub fn files_adjacent_mask(self) -> BB {
+        let file_mask = self.file_mask();
+        let left_file_mask = file_mask >> 1 & !FILE_H;
+        let right_file_mask = file_mask << 1 & !FILE_A;
+
+        left_file_mask | right_file_mask
+    }
+
     pub fn rank(&self) -> usize {
         self.0 >> 3
     }
@@ -106,11 +114,52 @@ impl fmt::Display for Square {
 }
 
 #[cfg(test)]
-pub mod test_display {
+mod test_masks {
+    use crate::bitboard::{FILE_B, FILE_G};
+
     use super::*;
 
     #[test]
-    pub fn a1() {
+    fn files_adjacent_mask_1() {
+        assert_eq!(A1.files_adjacent_mask(), FILE_B)
+    }
+
+    #[test]
+    fn files_adjacent_mask_2() {
+        assert_eq!(H1.files_adjacent_mask(), FILE_G)
+    }
+
+    #[test]
+    fn files_adjacent_mask_3() {
+        assert_eq!(C1.files_adjacent_mask(), FILE_B | FILE_B << 2)
+    }
+}
+
+#[cfg(test)]
+mod test_comparison {
+    use super::*;
+
+    #[test]
+    fn less_than_1() {
+        assert!(A1 < B2)
+    }
+
+    #[test]
+    fn less_than_2() {
+        assert!(!(A1 > B2))
+    }
+
+    #[test]
+    fn greater_than() {
+        assert!(B2 > A1)
+    }
+}
+#[cfg(test)]
+mod test_display {
+    use super::*;
+
+    #[test]
+    fn a1() {
         let fmt_str = A1.to_string();
         let expected = "a1";
 
@@ -118,7 +167,7 @@ pub mod test_display {
     }
 
     #[test]
-    pub fn h8() {
+    fn h8() {
         let fmt_str = H8.to_string();
         let expected = "h8";
 
@@ -126,7 +175,7 @@ pub mod test_display {
     }
 
     #[test]
-    pub fn c5() {
+    fn c5() {
         let fmt_str = C5.to_string();
         let expected = "c5";
 
@@ -203,7 +252,7 @@ pub const NULL: Square = Square(64);
 pub const FILES: [char; 8] = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
 pub const RANKS: [char; 8] = ['1', '2', '3', '4', '5', '6', '7', '8'];
 
-pub const ALL: [Square; 64] = [
+pub static ALL: [Square; 64] = [
     A1, B1, C1, D1, E1, F1, G1, H1, A2, B2, C2, D2, E2, F2, G2, H2, A3, B3, C3, D3, E3, F3, G3, H3,
     A4, B4, C4, D4, E4, F4, G4, H4, A5, B5, C5, D5, E5, F5, G5, H5, A6, B6, C6, D6, E6, F6, G6, H6,
     A7, B7, C7, D7, E7, F7, G7, H7, A8, B8, C8, D8, E8, F8, G8, H8,

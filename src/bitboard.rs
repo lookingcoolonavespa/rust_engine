@@ -177,6 +177,8 @@ pub const ROW_5: BB = BB(ROW_1.0 << (4 * 8));
 pub const ROW_7: BB = BB(ROW_1.0 << (6 * 8));
 pub const ROW_8: BB = BB(ROW_1.0 << (7 * 8));
 pub const EDGES: BB = BB(FILE_A.0 | FILE_H.0 | ROW_1.0 | ROW_8.0);
+pub const INNER_CENTER: BB = BB(103481868288);
+pub const OUTER_CENTER: BB = BB(66125924401152);
 
 impl fmt::Display for BB {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -271,6 +273,49 @@ pub mod test {
             ",
         );
         assert_eq!(END_ROWS.to_string(), expected);
+    }
+
+    #[test]
+    fn consts_5() {
+        let expected = unindent::unindent(
+            "
+              ABCDEFGH
+            8|........|8
+            7|........|7
+            6|........|6
+            5|...##...|5
+            4|...##...|4
+            3|........|3
+            2|........|2
+            1|........|1
+              ABCDEFGH
+            ",
+        );
+        assert_eq!(INNER_CENTER.to_string(), expected);
+    }
+
+    #[test]
+    fn consts_6() {
+        let expected = unindent::unindent(
+            "
+              ABCDEFGH
+            8|........|8
+            7|........|7
+            6|..####..|6
+            5|..#..#..|5
+            4|..#..#..|4
+            3|..####..|3
+            2|........|2
+            1|........|1
+              ABCDEFGH
+            ",
+        );
+        println!(
+            "expected: {}\nreceived: {}",
+            expected,
+            OUTER_CENTER.to_string()
+        );
+        assert_eq!(OUTER_CENTER.to_string(), expected);
     }
 }
 
@@ -408,7 +453,7 @@ pub static ROOK_RAYS: [BB; 64] = [
     BB(9187484529235886208),
 ];
 
-pub const KNIGHT_JUMPS: [BB; 64] = [
+pub static KNIGHT_JUMPS: [BB; 64] = [
     BB(0x0000000000020400u64),
     BB(0x0000000000050800u64),
     BB(0x00000000000A1100u64),
@@ -475,7 +520,7 @@ pub const KNIGHT_JUMPS: [BB; 64] = [
     BB(0x0020400000000000u64),
 ];
 
-pub const KING_MOVES: [BB; 64] = [
+pub static KING_MOVES: [BB; 64] = [
     BB(0x0000000000000302u64),
     BB(0x0000000000000705u64),
     BB(0x0000000000000E0Au64),
@@ -675,7 +720,7 @@ const B_PAWN_PUSHES: [BB; 64] = [
     BB(0),
 ];
 
-pub const PAWN_PUSHES: [[BB; 64]; 2] = [W_PAWN_PUSHES, B_PAWN_PUSHES];
+pub static PAWN_PUSHES: [[BB; 64]; 2] = [W_PAWN_PUSHES, B_PAWN_PUSHES];
 
 const W_PAWN_CAPTURES: [BB; 64] = [
     BB(512),
@@ -811,4 +856,4 @@ const B_PAWN_CAPTURES: [BB; 64] = [
     BB(18014398509481984),
 ];
 
-pub const PAWN_CAPTURES: [[BB; 64]; 2] = [W_PAWN_CAPTURES, B_PAWN_CAPTURES];
+pub static PAWN_CAPTURES: [[BB; 64]; 2] = [W_PAWN_CAPTURES, B_PAWN_CAPTURES];

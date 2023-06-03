@@ -3,16 +3,17 @@ use std::collections::HashMap;
 use crate::{
     bitboard::{self, BB},
     mv::castle::Castle,
+    phase::Phase,
     piece::Piece,
     piece_type::PieceType,
     side::Side,
     square::{self, Square},
     state::position::Position,
-    state::State,
     state::{
         castle_rights::{self, CastleRights},
         zobrist::Zobrist,
     },
+    state::{position::Board, State},
 };
 
 pub const STARTING_POSITION_FEN: &str = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
@@ -21,7 +22,7 @@ pub fn load_fen(fen: &str) -> Result<(Position, State), String> {
     let mut fen_state = fen.split(' ');
 
     let fen_board = fen_state.next().ok_or("fen string is empty")?;
-    let (bb_sides, bb_pieces, board, score) = parse_fen_board(fen_board)?;
+    let (bb_sides, bb_pieces, board) = parse_fen_board(fen_board)?;
 
     let fen_side_to_move = fen_state.next().ok_or("fen string is missing fields")?;
     let side_map: HashMap<&str, Side> = HashMap::from([("w", Side::White), ("b", Side::Black)]);
@@ -47,7 +48,12 @@ pub fn load_fen(fen: &str) -> Result<(Position, State), String> {
         Err(_) => return Err("fullmoves is not a number".to_string()),
     };
 
-    let position = Position::new(bb_sides, bb_pieces, board, score);
+    let phase = Phase::get(
+        bb_sides[0] | bb_sides[1],
+        bb_pieces[PieceType::Pawn.to_usize()],
+        fullmoves,
+    );
+    let position = Position::new(bb_sides, bb_pieces, board, phase);
     Ok((
         position,
         State::new(
@@ -61,9 +67,7 @@ pub fn load_fen(fen: &str) -> Result<(Position, State), String> {
     ))
 }
 
-fn parse_fen_board(
-    fen_board: &str,
-) -> Result<([BB; 2], [BB; 6], [Option<Piece>; 64], [u32; 2]), String> {
+fn parse_fen_board(fen_board: &str) -> Result<([BB; 2], [BB; 6], Board), String> {
     let mut bb_pieces = [
         bitboard::EMPTY,
         bitboard::EMPTY,
@@ -75,7 +79,6 @@ fn parse_fen_board(
 
     let mut bb_sides = [bitboard::EMPTY, bitboard::EMPTY];
     let mut board: [Option<Piece>; 64] = [None; 64];
-    let mut score: [u32; 2] = [0; 2];
 
     let mut rank = 7;
     let mut file = 0;
@@ -115,12 +118,10 @@ fn parse_fen_board(
 
         board[sq.to_usize()] = Some(Piece::new(side, piece_type));
 
-        score[side.to_usize()] += piece_type.score();
-
         file += 1;
     }
 
-    Ok((bb_sides, bb_pieces, board, score))
+    Ok((bb_sides, bb_pieces, board))
 }
 
 fn parse_fen_castle(fen_castle: &str) -> Result<CastleRights, String> {

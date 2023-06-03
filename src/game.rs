@@ -1094,6 +1094,22 @@ pub mod test_fen {
     }
 
     #[test]
+    fn phase() {
+        let fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 0";
+        let result = Game::from_fen(fen);
+        match result {
+            Ok(game) => {
+                let expected = "Opening";
+                println!("{}", game.position.phase().to_string());
+                assert_eq!(game.position.phase().to_string(), expected);
+            }
+            Err(e) => {
+                println!("{}", &e);
+                panic!()
+            }
+        }
+    }
+    #[test]
     fn parse_with_starting_fen() {
         let fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 0";
         let result = Game::from_fen(fen);
@@ -1580,7 +1596,7 @@ pub mod test_make_move {
         let to = A4;
         let mv = Move::Piece(EncodedMove::new(from, to, PieceType::Queen, true));
         let side = game.state.side_to_move();
-        let score = game.position.score(side.opposite());
+        let score = game.position.piece_score(side.opposite());
 
         let capture = game.make_move(mv);
 
@@ -1596,12 +1612,12 @@ pub mod test_make_move {
         assert!(!game.position.bb_side(side).is_set(from));
         assert!(!game.position.bb_side(side.opposite()).is_set(to));
         assert_eq!(
-            game.position.score(side.opposite()),
+            game.position.piece_score(side.opposite()),
             score
                 - capture
                     .expect("capture made but no piece given")
                     .piece_type()
-                    .score()
+                    .score() as i32
         )
     }
 
@@ -1615,7 +1631,7 @@ pub mod test_make_move {
         let to = H8;
         let mv = Move::Promotion(PromotionMove::new(from, to, &PromoteType::Queen, false));
         let side = game.state.side_to_move();
-        let score = game.position.score(side);
+        let score = game.position.piece_score(side);
         game.make_move(mv);
 
         assert!(game.position.at(to).is_some());
@@ -1625,8 +1641,8 @@ pub mod test_make_move {
         assert!(game.position.bb_side(side).is_set(to));
         assert!(!game.position.bb_side(side).is_set(from));
         assert_eq!(
-            game.position.score(side),
-            score - PieceType::Pawn.score() + PieceType::Queen.score()
+            game.position.piece_score(side),
+            score - PieceType::Pawn.score() as i32 + PieceType::Queen.score() as i32
         )
     }
 

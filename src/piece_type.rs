@@ -2,19 +2,26 @@ use std::fmt;
 
 use subenum::subenum;
 
+pub const PAWN_ID: isize = 0;
+pub const KNIGHT_ID: isize = 1;
+pub const BISHOP_ID: isize = 2;
+pub const ROOK_ID: isize = 3;
+pub const QUEEN_ID: isize = 4;
+pub const KING_ID: isize = 5;
+
 #[subenum(PromoteType)]
 #[derive(Debug, PartialEq, Copy, Clone)]
 pub enum PieceType {
-    Pawn = 0,
+    Pawn = PAWN_ID,
     #[subenum(PromoteType)]
-    Knight = 1,
+    Knight = KNIGHT_ID,
     #[subenum(PromoteType)]
-    Bishop = 2,
+    Bishop = BISHOP_ID,
     #[subenum(PromoteType)]
-    Rook = 3,
+    Rook = ROOK_ID,
     #[subenum(PromoteType)]
-    Queen = 4,
-    King = 5,
+    Queen = QUEEN_ID,
+    King = KING_ID,
 }
 
 pub const PIECE_TYPE_MAP: [PieceType; 6] = [

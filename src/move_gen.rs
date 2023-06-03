@@ -6,8 +6,6 @@ use crate::{
     state::position::Position,
 };
 
-use self::check_legal::pin_direction;
-
 pub mod check_legal;
 pub mod escape_check;
 mod parallel;

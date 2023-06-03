@@ -2,32 +2,41 @@ use core::fmt;
 
 use crate::bitboard::BB;
 use crate::move_gen::is_sq_attacked;
+use crate::phase::Phase;
 use crate::piece::Piece;
 use crate::piece_type::PieceType;
+use crate::psqt::PSQT;
 use crate::side::*;
 use crate::square::Square;
 use crate::util::grid_to_string;
+
+pub type Board = [Option<Piece>; 64];
+pub type Scores = [i32; 2];
 
 #[derive(Clone, PartialEq, Copy)]
 pub struct Position {
     bb_sides: [BB; 2],
     bb_pieces: [BB; 6],
     board: [Option<Piece>; 64],
-    score: [u32; 2],
+    piece_score: Scores,
+    sq_score: Scores,
+    phase: Phase,
 }
 impl Position {
-    pub fn new(
-        bb_sides: [BB; 2],
-        bb_pieces: [BB; 6],
-        board: [Option<Piece>; 64],
-        score: [u32; 2],
-    ) -> Position {
+    pub fn new(bb_sides: [BB; 2], bb_pieces: [BB; 6], board: Board, phase: Phase) -> Position {
+        let (piece_score, sq_score) = Position::calc_score(board, phase);
         Position {
+            sq_score,
+            piece_score,
             bb_sides,
             bb_pieces,
             board,
-            score,
+            phase,
         }
+    }
+
+    pub fn phase(&self) -> Phase {
+        self.phase
     }
 
     pub fn bb_occupied(&self) -> BB {
@@ -58,8 +67,12 @@ impl Position {
         self.bb_pieces[piece_type.to_usize()] & self.bb_sides[side.to_usize()]
     }
 
-    pub fn score(&self, side: Side) -> u32 {
-        self.score[side.to_usize()]
+    pub fn piece_score(&self, side: Side) -> i32 {
+        self.piece_score[side.to_usize()]
+    }
+
+    pub fn sq_score(&self, side: Side) -> i32 {
+        self.sq_score[side.to_usize()]
     }
 
     pub fn bb_sliders(&self, side: Side) -> (BB, BB) {
@@ -81,7 +94,9 @@ impl Position {
 
         self.board[from.to_usize()] = None;
 
-        self.score[side.to_usize()] -= piece_type.score();
+        self.piece_score[side.to_usize()] -= piece_type.score() as i32;
+        self.sq_score[side.to_usize()] -=
+            PSQT[side.to_usize()][piece_type.to_usize()][from.to_usize()].get(self.phase);
     }
 
     pub fn remove_at(&mut self, sq: Square) -> Option<Piece> {
@@ -101,7 +116,9 @@ impl Position {
 
         self.board[to.to_usize()] = Some(Piece::new(side, piece_type));
 
-        self.score[side.to_usize()] += piece_type.score();
+        self.piece_score[side.to_usize()] += piece_type.score() as i32;
+        self.sq_score[side.to_usize()] +=
+            PSQT[side.to_usize()][piece_type.to_usize()][to.to_usize()].get(self.phase);
     }
 
     pub fn move_piece(&mut self, piece_type: PieceType, from: Square, to: Square, side: Side) {
@@ -152,6 +169,23 @@ impl Position {
         }
 
         false
+    }
+
+    pub fn calc_score(board: Board, phase: Phase) -> (Scores, Scores) {
+        let mut piece_score = [0; 2];
+        let mut sq_score = [0; 2];
+        for (sq, piece_result) in board.iter().enumerate() {
+            if let Some(piece) = piece_result {
+                let side = piece.side();
+                let piece_type = piece.piece_type();
+
+                piece_score[side.to_usize()] += piece_type.score() as i32;
+                sq_score[side.to_usize()] +=
+                    PSQT[side.to_usize()][piece_type.to_usize()][sq as usize].get(phase);
+            }
+        }
+
+        (piece_score, sq_score)
     }
 }
 
