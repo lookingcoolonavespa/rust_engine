@@ -250,7 +250,7 @@ impl MoveFinder {
                 if let Some(tt_val) = tt_val_result {
                     -tt_val
                 } else {
-                    -self.alpha_beta(SEARCH_DEPTH - 1, -beta, -alpha, 1, &mut killer_mv_table)
+                    -self.pvs(SEARCH_DEPTH - 1, -beta, -alpha, 1, &mut killer_mv_table)
                 }
             };
 
@@ -279,7 +279,8 @@ impl MoveFinder {
         ))
     }
 
-    fn alpha_beta(
+    // principal variation search: https://www.chessprogramming.org/Principal_Variation_Search
+    fn pvs(
         &mut self,
         depth: u8,
         mut alpha: i32,
@@ -323,6 +324,8 @@ impl MoveFinder {
 
         let mut legal_moves_available = false;
 
+        let mut search_pv = true;
+
         for i in 0..pseudo_legal_mv_list.list().len() {
             let mv = self.pick_move(&mut pseudo_legal_mv_list, &mut scores, i);
             if !self.game.is_legal(mv, &legal_check_preprocessing) {
@@ -346,14 +349,34 @@ impl MoveFinder {
 
                 if let Some(tt_val) = tt_val_result {
                     -tt_val
-                } else {
-                    -self.alpha_beta(
+                } else if search_pv {
+                    -self.pvs(
                         depth - 1,
                         -beta,
                         -alpha,
                         levels_searched + 1,
                         killer_mv_table,
                     )
+                } else {
+                    let mut score = -self.pvs(
+                        depth - 1,
+                        -alpha - 1,
+                        -alpha,
+                        levels_searched + 1,
+                        killer_mv_table,
+                    );
+
+                    if score > alpha && score < beta {
+                        score = -self.pvs(
+                            depth - 1,
+                            -beta,
+                            -alpha,
+                            levels_searched + 1,
+                            killer_mv_table,
+                        )
+                    }
+
+                    score
                 }
             };
 
@@ -378,6 +401,8 @@ impl MoveFinder {
                 // store lower bound
                 self.tt.store(zobrist, depth, TtFlag::Alpha, eval, None);
             }
+
+            search_pv = false;
         }
 
         if !legal_moves_available && legal_check_preprocessing.in_check() {
@@ -415,7 +440,7 @@ impl MoveFinder {
             if let Some(tt_val) = tt_val_result {
                 return tt_val;
             } else {
-                return self.alpha_beta(1, alpha, beta, levels_searched, killer_mv_table);
+                return self.pvs(1, alpha, beta, levels_searched, killer_mv_table);
             }
         }
 
