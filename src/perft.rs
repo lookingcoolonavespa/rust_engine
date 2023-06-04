@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use crate::{
     game::Game,
     move_gen::{
@@ -6,11 +8,9 @@ use crate::{
     },
 };
 
-pub fn count_moves_debug(depth: u32, game: &mut Game) -> u32 {
-    if depth == 0 {
-        return 1;
-    }
+type ZobristMap = HashMap<u64, u32>;
 
+pub fn count_moves_debug(depth: u32, game: &mut Game) -> (u32, u32) {
     let mut count: u32 = 0;
 
     let side = game.state().side_to_move();
@@ -27,25 +27,47 @@ pub fn count_moves_debug(depth: u32, game: &mut Game) -> u32 {
 
     let prev_state = game.state().encode();
 
+    let mut zobrist_map: ZobristMap = HashMap::new();
+
     for mv in pseudo_legal_mv_list.list().iter() {
         if !game.is_legal(*mv, &legal_check_preprocessing) {
             continue;
         }
 
+        let zobrist_count_before_move = zobrist_map.len();
+
         let capture = game.make_move(*mv);
-        let sub_nodes = count_moves(depth - 1, game);
-        println!("{}: {}", mv, sub_nodes);
+
+        let sub_nodes = count_moves(depth - 1, game, &mut zobrist_map);
         count += sub_nodes;
+
+        println!(
+            "{}: {} {}",
+            mv,
+            sub_nodes,
+            zobrist_map.len() - zobrist_count_before_move
+        );
+
         game.unmake_move(*mv, capture, prev_state)
     }
 
-    println!("\ntotal nodes: {}\n", count);
+    let total_zobrist_collisions: u32 = zobrist_map.values().sum();
+    println!(
+        "\ntotal nodes: {}\ntotal zobrist hashes: {}\ntotal zobrist collisions: {}",
+        count,
+        zobrist_map.len(),
+        total_zobrist_collisions
+    );
 
-    count
+    (count, zobrist_map.len() as u32 + total_zobrist_collisions)
 }
 
-fn count_moves(depth: u32, game: &mut Game) -> u32 {
+fn count_moves(depth: u32, game: &mut Game, zobrist_map: &mut ZobristMap) -> u32 {
     if depth == 0 {
+        zobrist_map
+            .entry(game.state().zobrist().to_u64())
+            .and_modify(|v| *v += 1)
+            .or_insert(0);
         return 1;
     }
 
@@ -70,7 +92,8 @@ fn count_moves(depth: u32, game: &mut Game) -> u32 {
         }
 
         let capture = game.make_move(*mv);
-        count += count_moves(depth - 1, game);
+        count += count_moves(depth - 1, game, zobrist_map);
+
         game.unmake_move(*mv, capture, prev_state);
     }
 
@@ -105,9 +128,10 @@ fn read_test_suite() {
                 "{} is not a number",
                 ply_result[3..].trim().to_owned()
             );
+            let expected_nodes = expected_nodes.unwrap();
             assert_eq!(
                 count_moves_debug(depth as u32, &mut game),
-                expected_nodes.unwrap(),
+                (expected_nodes, expected_nodes),
                 "fen: {} depth: {}",
                 fen,
                 depth
@@ -128,64 +152,64 @@ pub mod test_suite {
 }
 
 #[cfg(test)]
-pub mod perft_start_pos {
+pub mod start_pos {
     use super::*;
     use crate::fen::STARTING_POSITION_FEN;
 
     #[test]
-    fn start_pos_one_ply() {
+    fn one_ply() {
         let fen = STARTING_POSITION_FEN;
         let result = Game::from_fen(fen);
         assert!(result.is_ok());
         let mut game = result.unwrap();
-        assert_eq!(count_moves(1, &mut game), 20)
+        assert_eq!(count_moves_debug(1, &mut game), (20, 20))
     }
 
     #[test]
-    fn start_pos_two_ply() {
+    fn two_ply() {
         let fen = STARTING_POSITION_FEN;
         let result = Game::from_fen(fen);
         assert!(result.is_ok());
         let mut game = result.unwrap();
-        assert_eq!(count_moves(2, &mut game), 400)
+        assert_eq!(count_moves_debug(2, &mut game), (400, 400))
     }
 
     #[test]
-    fn start_pos_three_ply() {
+    fn three_ply() {
         let fen = STARTING_POSITION_FEN;
         let result = Game::from_fen(fen);
         assert!(result.is_ok());
         let mut game = result.unwrap();
-        assert_eq!(count_moves(3, &mut game), 8902)
+        assert_eq!(count_moves_debug(3, &mut game), (8902, 8902))
     }
 
     #[test]
-    fn start_pos_four_ply() {
+    fn four_ply() {
         let fen = STARTING_POSITION_FEN;
         let result = Game::from_fen(fen);
         assert!(result.is_ok());
         let mut game = result.unwrap();
-        assert_eq!(count_moves(4, &mut game), 197_281)
+        assert_eq!(count_moves_debug(4, &mut game), (197_281, 197_281))
     }
 
     #[ignore]
     #[test]
-    fn start_pos_five_ply() {
+    fn five_ply() {
         let fen = STARTING_POSITION_FEN;
         let result = Game::from_fen(fen);
         assert!(result.is_ok());
         let mut game = result.unwrap();
-        assert_eq!(count_moves_debug(5, &mut game), 4_865_609)
+        assert_eq!(count_moves_debug(5, &mut game), (4_865_609, 4_865_609))
     }
 
     #[ignore = "only need to run when movegen logic changes"]
     #[test]
-    fn start_pos_six_ply() {
+    fn six_ply() {
         let fen = STARTING_POSITION_FEN;
         let result = Game::from_fen(fen);
         assert!(result.is_ok());
         let mut game = result.unwrap();
-        assert_eq!(count_moves_debug(6, &mut game), 119_060_324)
+        assert_eq!(count_moves_debug(6, &mut game), (119_060_324, 119_060_324))
     }
 }
 
@@ -200,7 +224,7 @@ pub mod perft_fen_1 {
         let result = Game::from_fen(FEN);
         assert!(result.is_ok());
         let mut game = result.unwrap();
-        assert_eq!(count_moves_debug(1, &mut game), 48)
+        assert_eq!(count_moves_debug(1, &mut game), (48, 48))
     }
 
     #[test]
@@ -208,7 +232,7 @@ pub mod perft_fen_1 {
         let result = Game::from_fen(FEN);
         assert!(result.is_ok());
         let mut game = result.unwrap();
-        assert_eq!(count_moves_debug(2, &mut game), 2039)
+        assert_eq!(count_moves_debug(2, &mut game), (2039, 2039))
     }
 
     #[test]
@@ -216,7 +240,7 @@ pub mod perft_fen_1 {
         let result = Game::from_fen(FEN);
         assert!(result.is_ok());
         let mut game = result.unwrap();
-        assert_eq!(count_moves_debug(3, &mut game), 97862)
+        assert_eq!(count_moves_debug(3, &mut game), (97862, 97862))
     }
 
     #[ignore]
@@ -225,7 +249,7 @@ pub mod perft_fen_1 {
         let result = Game::from_fen(FEN);
         assert!(result.is_ok());
         let mut game = result.unwrap();
-        assert_eq!(count_moves_debug(4, &mut game), 4_085_603)
+        assert_eq!(count_moves_debug(4, &mut game), (4_085_603, 4_085_603))
     }
 
     #[ignore]
@@ -234,7 +258,7 @@ pub mod perft_fen_1 {
         let result = Game::from_fen(FEN);
         assert!(result.is_ok());
         let mut game = result.unwrap();
-        assert_eq!(count_moves_debug(5, &mut game), 193_690_690)
+        assert_eq!(count_moves_debug(5, &mut game), (193_690_690, 193_690_690))
     }
 }
 
@@ -249,7 +273,7 @@ pub mod perft_fen_2 {
         let result = Game::from_fen(FEN);
         assert!(result.is_ok());
         let mut game = result.unwrap();
-        assert_eq!(count_moves_debug(1, &mut game), 15)
+        assert_eq!(count_moves_debug(1, &mut game), (15, 15))
     }
 
     #[test]
@@ -257,7 +281,7 @@ pub mod perft_fen_2 {
         let result = Game::from_fen(FEN);
         assert!(result.is_ok());
         let mut game = result.unwrap();
-        assert_eq!(count_moves_debug(2, &mut game), 66)
+        assert_eq!(count_moves_debug(2, &mut game), (66, 66))
     }
 
     #[test]
@@ -265,7 +289,7 @@ pub mod perft_fen_2 {
         let result = Game::from_fen(FEN);
         assert!(result.is_ok());
         let mut game = result.unwrap();
-        assert_eq!(count_moves_debug(3, &mut game), 1197)
+        assert_eq!(count_moves_debug(3, &mut game), (1197, 1197))
     }
 
     #[test]
@@ -273,7 +297,7 @@ pub mod perft_fen_2 {
         let result = Game::from_fen(FEN);
         assert!(result.is_ok());
         let mut game = result.unwrap();
-        assert_eq!(count_moves_debug(4, &mut game), 7059)
+        assert_eq!(count_moves_debug(4, &mut game), (7059, 7059))
     }
 
     #[test]
@@ -281,7 +305,7 @@ pub mod perft_fen_2 {
         let result = Game::from_fen(FEN);
         assert!(result.is_ok());
         let mut game = result.unwrap();
-        assert_eq!(count_moves_debug(5, &mut game), 133_987)
+        assert_eq!(count_moves_debug(5, &mut game), (133_987, 133_987))
     }
 
     #[ignore]
@@ -290,7 +314,7 @@ pub mod perft_fen_2 {
         let result = Game::from_fen(FEN);
         assert!(result.is_ok());
         let mut game = result.unwrap();
-        assert_eq!(count_moves_debug(6, &mut game), 764_643)
+        assert_eq!(count_moves_debug(6, &mut game), (764_643, 764_643))
     }
 }
 
@@ -310,7 +334,7 @@ pub mod perft_promotion {
         let result = Game::from_fen(FEN);
         assert!(result.is_ok());
         let mut game = result.unwrap();
-        assert_eq!(count_moves_debug(1, &mut game), 24)
+        assert_eq!(count_moves_debug(1, &mut game), (24, 24))
     }
 
     #[test]
@@ -318,7 +342,7 @@ pub mod perft_promotion {
         let result = Game::from_fen(FEN);
         assert!(result.is_ok());
         let mut game = result.unwrap();
-        assert_eq!(count_moves_debug(2, &mut game), 496)
+        assert_eq!(count_moves_debug(2, &mut game), (496, 496))
     }
 
     #[test]
@@ -326,7 +350,7 @@ pub mod perft_promotion {
         let result = Game::from_fen(FEN);
         assert!(result.is_ok());
         let mut game = result.unwrap();
-        assert_eq!(count_moves_debug(3, &mut game), 9483)
+        assert_eq!(count_moves_debug(3, &mut game), (9483, 9483))
     }
 
     #[test]
@@ -362,7 +386,7 @@ pub mod perft_promotion {
         let result = Game::from_fen(FEN);
         assert!(result.is_ok());
         let mut game = result.unwrap();
-        assert_eq!(count_moves_debug(4, &mut game), 182_838)
+        assert_eq!(count_moves_debug(4, &mut game), (182_838, 182_838))
     }
 
     #[ignore]
@@ -371,7 +395,7 @@ pub mod perft_promotion {
         let result = Game::from_fen(FEN);
         assert!(result.is_ok());
         let mut game = result.unwrap();
-        assert_eq!(count_moves_debug(5, &mut game), 3_605_103)
+        assert_eq!(count_moves_debug(5, &mut game), (3_605_103, 3_605_103))
     }
 
     #[ignore]
@@ -380,7 +404,7 @@ pub mod perft_promotion {
         let result = Game::from_fen(FEN);
         assert!(result.is_ok());
         let mut game = result.unwrap();
-        assert_eq!(count_moves_debug(6, &mut game), 71_179_139)
+        assert_eq!(count_moves_debug(6, &mut game), (71_179_139, 71_179_139))
     }
 
     #[test]
