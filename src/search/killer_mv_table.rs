@@ -11,6 +11,7 @@ impl KillerMoveTable {
 
     pub fn insert(&mut self, mv: Move, ply: usize) {
         debug_assert!(ply <= SEARCH_DEPTH as usize);
+        debug_assert!(mv != Move::Null());
         let tmp = self.0[ply][0];
         self.0[ply][0] = Some(mv);
         self.0[ply][1] = tmp;

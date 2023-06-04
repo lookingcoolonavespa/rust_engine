@@ -250,12 +250,19 @@ impl MoveFinder {
                 if let Some(tt_val) = tt_val_result {
                     -tt_val
                 } else {
-                    -self.pvs(SEARCH_DEPTH - 1, -beta, -alpha, 1, &mut killer_mv_table)
+                    -self.pvs(
+                        SEARCH_DEPTH - 1,
+                        -beta,
+                        -alpha,
+                        1,
+                        &mut killer_mv_table,
+                        false,
+                    )
                 }
             };
 
             println!(
-                "alpha: {alpha}, mv: {mv}, sq score: {}",
+                "eval: {eval}, mv: {mv}, sq score: {}",
                 self.game.position().sq_score(stm) - self.game.position().sq_score(stm.opposite())
             );
 
@@ -287,6 +294,7 @@ impl MoveFinder {
         beta: i32,
         levels_searched: u8,
         killer_mv_table: &mut KillerMoveTable,
+        insert_killver_mv: bool,
     ) -> i32 {
         if depth == 0 {
             // need to reverse beta and alpha bc the eval stored is from the eyes of
@@ -356,6 +364,7 @@ impl MoveFinder {
                         -alpha,
                         levels_searched + 1,
                         killer_mv_table,
+                        false,
                     )
                 } else {
                     let mut score = -self.pvs(
@@ -364,6 +373,7 @@ impl MoveFinder {
                         -alpha,
                         levels_searched + 1,
                         killer_mv_table,
+                        false,
                     );
 
                     if score > alpha && score < beta {
@@ -373,6 +383,7 @@ impl MoveFinder {
                             -alpha,
                             levels_searched + 1,
                             killer_mv_table,
+                            false,
                         )
                     }
 
@@ -386,7 +397,7 @@ impl MoveFinder {
             if eval >= beta {
                 // store upper bound for position
                 self.tt.store(zobrist, depth, TtFlag::Beta, eval, Some(mv));
-                if capture.is_none() {
+                if capture.is_none() && insert_killver_mv {
                     killer_mv_table.insert(mv, depth as usize);
                 }
 
@@ -440,7 +451,7 @@ impl MoveFinder {
             if let Some(tt_val) = tt_val_result {
                 return tt_val;
             } else {
-                return self.pvs(1, alpha, beta, levels_searched, killer_mv_table);
+                return self.pvs(1, alpha, beta, levels_searched, killer_mv_table, true);
             }
         }
 
