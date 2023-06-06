@@ -2,6 +2,8 @@ use std::collections::HashMap;
 
 use crate::{game::Game, mv::Move};
 
+use super::Depth;
+
 const TABLE_SIZE: u64 = 0x100000 * 64;
 const ENTRY_SIZE: u64 = 24; // TableEntry is 24 bytes
 
@@ -12,13 +14,14 @@ pub struct TranspositionTable {
 
 struct TableEntry {
     zobrist: u64,
-    depth: u8,
+    depth: Depth,
     flag: TtFlag,
     eval: i32,
     mv: Option<Move>,
     age: u16,
 }
 
+#[derive(Debug, Clone, Copy)]
 pub enum TtFlag {
     Exact,
     Beta,
@@ -29,7 +32,7 @@ impl TableEntry {
     pub fn replace(
         &mut self,
         zobrist: u64,
-        depth: u8,
+        depth: Depth,
         flag: TtFlag,
         eval: i32,
         mv: Option<Move>,
@@ -60,7 +63,7 @@ impl TranspositionTable {
         (zobrist % (TABLE_SIZE / ENTRY_SIZE)) as u32
     }
 
-    pub fn store(&mut self, zobrist: u64, depth: u8, flag: TtFlag, eval: i32, mv: Option<Move>) {
+    pub fn store(&mut self, zobrist: u64, depth: Depth, flag: TtFlag, eval: i32, mv: Option<Move>) {
         let key = self.get_table_key(zobrist);
 
         let entry_result = self.map.get_mut(&key);
@@ -83,7 +86,7 @@ impl TranspositionTable {
         }
     }
 
-    pub fn probe_val(&self, zobrist: u64, depth: u8, alpha: i32, beta: i32) -> Option<i32> {
+    pub fn probe_val(&self, zobrist: u64, depth: Depth, alpha: i32, beta: i32) -> Option<i32> {
         let key = self.get_table_key(zobrist);
 
         let entry_result = self.map.get(&key);
@@ -114,7 +117,7 @@ impl TranspositionTable {
         None
     }
 
-    pub fn probe_move(&self, zobrist: u64, depth: u8) -> Option<Move> {
+    pub fn probe_move(&self, zobrist: u64, depth: Depth) -> Option<Move> {
         let key = self.get_table_key(zobrist);
         let entry_result = self.map.get(&key);
         if let Some(entry) = entry_result {

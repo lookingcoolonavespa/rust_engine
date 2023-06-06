@@ -51,10 +51,10 @@ mod raw_psqt {
         Score(0, 0, 0), Score(0, 0, 0), Score(0, 0, 0), Score(0, 0, 0),
     ];
     pub const QUEEN_PSQT: RawPsqt = [
-        Score(0, 0, 0), Score(0, 0, 0), Score(0, 0, 0), Score(70, 0, 0),
-        Score(-20, -20, 0), Score(-10, -10, 0), Score(20, 20, 0), Score(20, 20, 0),
-        Score(0, 0, 0), Score(0, 0, 0), Score(40, 0, 0), Score(-30, 0, 0),
-        Score(0, 0, 0), Score(0, 0, 0), Score(0, 0, 30), Score(-55, 20, 30),
+        Score(0, 0, 0), Score(0, 0, 0), Score(0, 0, 0), Score(110, 0, 0),
+        Score(-20, -20, 0), Score(-10, -10, 0), Score(0, 20, 0), Score(0, 20, 0),
+        Score(-10, 0, 0), Score(-10, 0, 0), Score(30, 0, 0), Score(-30, 0, 0),
+        Score(-10, 0, 0), Score(-10, 0, 0), Score(-10, 0, 30), Score(-50, 20, 30),
         Score(0, 0, 0), Score(0, 0, 0), Score(0, 0, 20), Score(-50, 20, 40),
         Score(0, 0, 0), Score(0, 0, 0), Score(0, 0, 0), Score(0, 0, 0),
         Score(0, 20, 20), Score(0, 20, 20), Score(0, 20, 20), Score(0, 20, 20),

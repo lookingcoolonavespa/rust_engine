@@ -10,7 +10,9 @@ use crate::{
 
 use self::king_heuristics::king_safety;
 
-pub const CHECKMATE_VAL: i32 = i32::MAX;
+// need to subtract one because of the zero window width used in principal variation search
+// if you dont subtract one youll get a "attempt to negate with overflow" error
+pub const MAX_EVAL: i32 = i32::MAX - 1;
 pub const DRAW_SCORE: Score = Score(-50, -25, 0);
 
 pub fn eval(
@@ -22,7 +24,7 @@ pub fn eval(
         return DRAW_SCORE.get(game.position().phase());
     }
     if game.is_checkmate(legal_check_preprocessing) {
-        return -(CHECKMATE_VAL - levels_searched as i32);
+        return -(MAX_EVAL - levels_searched as i32);
     }
     if game.is_stalemate(legal_check_preprocessing) {
         return DRAW_SCORE.get(game.position().phase());
