@@ -1,6 +1,6 @@
 use core::fmt;
 
-use crate::bitboard::BB;
+use crate::bitboard::{self, BB};
 use crate::move_gen::is_sq_attacked;
 use crate::phase::Phase;
 use crate::piece::Piece;
@@ -92,6 +92,11 @@ impl Position {
         self.bb_pieces[piece_type.to_usize()] ^= from_bb;
         self.bb_sides[side.to_usize()] ^= from_bb;
 
+        debug_assert_eq!(
+            self.bb_sides[side.to_usize()] & from_bb,
+            crate::bitboard::EMPTY
+        );
+
         self.board[from.to_usize()] = None;
 
         self.piece_score[side.to_usize()] -= piece_type.score() as i32;
@@ -101,9 +106,13 @@ impl Position {
 
     pub fn remove_at(&mut self, sq: Square) -> Option<Piece> {
         let result = self.board[sq.to_usize()];
-        if let Some(pc) = result {
-            self.remove_piece(pc.piece_type(), sq, pc.side());
-        }
+        debug_assert!(
+            result.is_some(),
+            "unable to remove at {} because there is nothing there",
+            sq
+        );
+        let pc = result.unwrap();
+        self.remove_piece(pc.piece_type(), sq, pc.side());
 
         result
     }
@@ -113,6 +122,8 @@ impl Position {
 
         self.bb_pieces[piece_type.to_usize()] |= to_bb;
         self.bb_sides[side.to_usize()] |= to_bb;
+
+        debug_assert_ne!(self.bb_sides[side.to_usize()] & to_bb, bitboard::EMPTY);
 
         self.board[to.to_usize()] = Some(Piece::new(side, piece_type));
 

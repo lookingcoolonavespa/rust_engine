@@ -151,26 +151,30 @@ impl State {
         self.fullmoves += 1;
     }
 
+    pub fn set_side_to_move(&mut self, side: Side) {
+        self.side_to_move = side;
+    }
+
     pub fn update_side_to_move(&mut self) {
         self.side_to_move = self.side_to_move.opposite();
         self.zobrist.hash_side(self.side_to_move);
     }
 
-    pub fn rollback_zobrist_table(&mut self, zobrist: Zobrist) {
+    pub fn rollback_zobrist_table(&mut self, zobrist: u64) {
         debug_assert!(
             self.zobrist_table
-                .get(&zobrist.to_u64())
+                .get(&zobrist)
                 .expect("rolled back zobrist table but zobrist was not stored in table")
                 > &0u8
         );
         self.zobrist_table
-            .entry(zobrist.to_u64())
+            .entry(zobrist)
             .and_modify(|count| *count -= 1);
     }
 
-    pub fn push_to_zobrist_table(&mut self, zobrist: Zobrist) {
+    pub fn push_to_zobrist_table(&mut self, zobrist: u64) {
         self.zobrist_table
-            .entry(zobrist.to_u64())
+            .entry(zobrist)
             .and_modify(|count| *count += 1)
             .or_insert(1);
     }

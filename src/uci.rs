@@ -539,7 +539,6 @@ fn move_to_algebra(mv: Move, side: Side) -> String {
                 promote_type_char.to_string().to_lowercase()
             )
         }
-        Move::Null() => "null".to_string(),
     }
 }
 

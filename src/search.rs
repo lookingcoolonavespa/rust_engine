@@ -17,9 +17,10 @@ use self::{
 mod killer_mv_table;
 mod tt;
 
-pub type Depth = i8;
-pub const SEARCH_DEPTH: Depth = 7;
+pub type Depth = u8;
+pub const SEARCH_DEPTH: Depth = 8;
 const MAX_DEPTH: u8 = 12;
+const R: u8 = 2;
 
 const MVV_LVA: [[u8; 6]; 6] = [
     [15, 14, 13, 12, 11, 10], // victim P, attacker none, p, n , b, r, q, k
@@ -82,21 +83,23 @@ impl MoveFinder {
         &self,
         game: &Game,
         mv_list: &MoveList,
-        tt_mv: Move,
+        tt_mv_option: Option<&Move>,
         killer_mv_table: &KillerMoveTable,
         ply: usize,
     ) -> Vec<u8> {
         let mut scores = vec![0; mv_list.list().len()];
 
-        let killer_mv_1 = killer_mv_table.get_first(ply).unwrap_or(Move::Null());
-        let killer_mv_2 = killer_mv_table.get_second(ply).unwrap_or(Move::Null());
+        let killer_mv_1_option = killer_mv_table.get_first(ply);
+        let killer_mv_1_ref = killer_mv_1_option.as_ref();
+        let killer_mv_2_option = killer_mv_table.get_second(ply);
+        let killer_mv_2_ref = killer_mv_2_option.as_ref();
 
         for (i, mv) in mv_list.list().iter().enumerate() {
-            if *mv == tt_mv {
+            if tt_mv_option == Some(mv) {
                 scores[i] = TT_MOVE_SORT_VAL;
-            } else if *mv == killer_mv_1 {
+            } else if killer_mv_1_ref == Some(mv) {
                 scores[i] = KILLER_MOVE_1_SORT_VAL;
-            } else if *mv == killer_mv_2 {
+            } else if killer_mv_2_ref == Some(mv) {
                 scores[i] = KILLER_MOVE_2_SORT_VAL;
             } else {
                 match mv {
@@ -105,8 +108,12 @@ impl MoveFinder {
                             let (_, to) = mv.decode_into_squares();
                             debug_assert!(
                                 game.position().at(to).is_some(),
-                                "move is capture but no piece found on {}",
-                                to
+                                "move is capture but no piece found on {}\nmove: {}\n{}\n{}",
+                                to,
+                                mv,
+                                game.position(),
+                                game.position()
+                                    .bb_side(game.state().side_to_move().opposite())
                             );
                             let attacker = mv.piece_type();
                             let capture = game.position().at(to).unwrap().piece_type();
@@ -137,7 +144,6 @@ impl MoveFinder {
                         }
                     }
                     Move::DoublePawnPush(_) | Move::Castle(_) => {}
-                    Move::Null() => panic!("null move encountered in move list"),
                 }
             }
         }
@@ -145,11 +151,16 @@ impl MoveFinder {
         scores
     }
 
-    pub fn score_moves(&self, game: &Game, mv_list: &MoveList, tt_mv: Move) -> Vec<u8> {
+    pub fn score_moves(
+        &self,
+        game: &Game,
+        mv_list: &MoveList,
+        tt_mv_option: Option<&Move>,
+    ) -> Vec<u8> {
         let mut scores = vec![0; mv_list.list().len()];
 
         for (i, mv) in mv_list.list().iter().enumerate() {
-            if *mv == tt_mv {
+            if tt_mv_option == Some(mv) {
                 scores[i] = TT_MOVE_SORT_VAL;
             } else {
                 match mv {
@@ -190,7 +201,6 @@ impl MoveFinder {
                         }
                     }
                     Move::DoublePawnPush(_) | Move::Castle(_) => {}
-                    Move::Null() => panic!("null move encountered in move list"),
                 }
             }
         }
@@ -246,11 +256,7 @@ impl MoveFinder {
         let tt_mv_result = self
             .tt
             .probe_move(self.game.state().zobrist().to_u64(), SEARCH_DEPTH);
-        let mut scores = self.score_moves(
-            &self.game,
-            &pseudo_legal_mv_list,
-            tt_mv_result.unwrap_or(Move::Null()),
-        );
+        let mut scores = self.score_moves(&self.game, &pseudo_legal_mv_list, tt_mv_result.as_ref());
 
         for i in 0..pseudo_legal_mv_list.list().len() {
             let mv = self.pick_move(&mut pseudo_legal_mv_list, &mut scores, i);
@@ -270,6 +276,7 @@ impl MoveFinder {
                     -alpha,
                     1,
                     &mut killer_mv_table,
+                    false,
                 )
             };
 
@@ -301,14 +308,15 @@ impl MoveFinder {
         ))
     }
 
-    //  https://www.chessprogramming.org/Principal_Variation_Search
     fn principal_variation_search(
+        // https://www.chessprogramming.org/Principal_Variation_Search
         &mut self,
         depth: Depth,
         mut alpha: Eval,
         beta: Eval,
         levels_searched: u8,
         killer_mv_table: &mut KillerMoveTable,
+        do_null_move: bool,
     ) -> Eval {
         if depth == 0 {
             return self.quiescence(alpha, beta, levels_searched, killer_mv_table);
@@ -323,10 +331,28 @@ impl MoveFinder {
             return tt_val;
         }
 
-        // getting pseudo legal moves
+        // null move pruning
         let stm = self.game.state().side_to_move();
 
         let legal_check_preprocessing = LegalCheckPreprocessing::from(&mut self.game, stm);
+        if do_null_move && !legal_check_preprocessing.in_check() && depth > R {
+            let en_passant_option = self.game.state().en_passant();
+            self.game.make_null_move();
+            let eval = -self.principal_variation_search(
+                depth - 1 - R,
+                -beta,
+                1 - beta,
+                levels_searched + 1,
+                killer_mv_table,
+                false,
+            );
+            self.game.unmake_null_move(en_passant_option);
+            if eval >= beta {
+                return eval;
+            }
+        }
+
+        // getting pseudo legal moves
         let mut pseudo_legal_mv_list = if legal_check_preprocessing.in_check() {
             self.game
                 .pseudo_legal_escape_moves(stm, &legal_check_preprocessing)
@@ -341,7 +367,7 @@ impl MoveFinder {
         let mut scores = self.score_moves_with_killer_moves(
             &self.game,
             &pseudo_legal_mv_list,
-            tt_mv_result.unwrap_or(Move::Null()),
+            tt_mv_result.as_ref(),
             killer_mv_table,
             depth as usize,
         );
@@ -349,6 +375,7 @@ impl MoveFinder {
         let mut legal_moves_available = false;
 
         let mut tt_details = TtDetails::new();
+        let mut found_pv = false;
 
         for i in 0..pseudo_legal_mv_list.list().len() {
             let mv = self.pick_move(&mut pseudo_legal_mv_list, &mut scores, i);
@@ -361,15 +388,16 @@ impl MoveFinder {
             let prev_state = self.game.state().encode();
             let capture = self.game.make_move(mv);
 
-            let eval: Eval = if self.game.is_draw() {
+            let eval = if self.game.is_draw() {
                 DRAW_SCORE.get(self.game.position().phase())
-            } else if i == 0 {
+            } else if !found_pv {
                 -self.principal_variation_search(
                     depth - 1,
                     -beta,
                     -alpha,
                     levels_searched + 1,
                     killer_mv_table,
+                    false,
                 )
             } else {
                 let mut score = -self.principal_variation_search(
@@ -378,6 +406,7 @@ impl MoveFinder {
                     -alpha,
                     levels_searched + 1,
                     killer_mv_table,
+                    !do_null_move,
                 );
 
                 // re-search
@@ -388,6 +417,7 @@ impl MoveFinder {
                         -alpha,
                         levels_searched + 1,
                         killer_mv_table,
+                        !do_null_move,
                     )
                 }
 
@@ -409,6 +439,7 @@ impl MoveFinder {
             if eval > alpha {
                 tt_details = TtDetails::from(TtFlag::Exact, Some(mv), eval);
                 alpha = eval;
+                found_pv = true;
             } else if eval > tt_details.eval() {
                 // store upper bound
                 tt_details = TtDetails::from(TtFlag::Alpha, None, eval);
@@ -432,9 +463,10 @@ impl MoveFinder {
 
         debug_assert!(
             alpha > i32::MIN && alpha <= MAX_EVAL,
-            "alpha is out of bounds, tt-details: {:?}",
+            "alpha is out of bounds\nalpha:{alpha}\ntt-details: {:?}",
             tt_details
         );
+
         alpha
     }
 
@@ -460,6 +492,7 @@ impl MoveFinder {
                 beta,
                 levels_searched,
                 killer_mv_table,
+                false,
             );
         }
 
@@ -474,7 +507,7 @@ impl MoveFinder {
 
         let mut pseudo_legal_mv_list = self.game.pseudo_legal_loud_moves(stm);
 
-        let mut scores = self.score_moves(&self.game, &pseudo_legal_mv_list, Move::Null());
+        let mut scores = self.score_moves(&self.game, &pseudo_legal_mv_list, None);
 
         for i in 0..pseudo_legal_mv_list.list().len() {
             let mv = self.pick_move(&mut pseudo_legal_mv_list, &mut scores, i);
@@ -501,6 +534,11 @@ impl MoveFinder {
                 alpha = eval;
             }
         }
+
+        debug_assert!(
+            alpha > i32::MIN && alpha <= MAX_EVAL,
+            "alpha is out of bounds\nalpha:{alpha}",
+        );
 
         alpha
     }
@@ -615,59 +653,6 @@ pub mod test_basic_tactics {
                 .get(crate::phase::Phase::Opening)
         );
         assert_eq!(best_move.to_string(), "d1f3");
-    }
-
-    #[test]
-    fn debug_pos_1() {
-        let mut game = Game::from_fen(STARTING_POSITION_FEN).unwrap();
-        game = uci::input_position("position startpos moves e2e3 c7c6 c2c3 a7a5 a2a3 e7e6 d2d3 d7d6 g2g3 b7b6 f2f3 b6b5 e3e4 f7f6 b2b3 g7g6 h2h3 b8a6 a3a4 b5a4", game);
-        println!("{}", game.position().sq_score(Side::White));
-        println!("{}", game.position());
-        let mut mv_finder = MoveFinder::new(game.clone());
-
-        let best_move_result = mv_finder.get();
-        let expected_eval = 0;
-
-        assert!(best_move_result.is_some());
-        let (best_move, eval) = best_move_result.unwrap();
-        println!("{}", game.position().phase());
-        println!(
-            "white score: {}, black score: {}",
-            game.position().piece_score(Side::White),
-            game.position().piece_score(Side::Black)
-        );
-        println!(
-            "\nbest move: {}; eval: {}\nexpected eval: {}",
-            best_move, eval, expected_eval
-        );
-        assert_eq!(best_move.to_string(), "b3a4");
-    }
-
-    #[test]
-    fn debug_pos_2() {
-        let mut game = Game::from_fen(STARTING_POSITION_FEN).unwrap();
-        game = uci::input_position(
-            "position startpos moves a2a3 a7a5 b2b3 a5a4 c2c4 a4b3 c1b2 b7b5 d1b3 c7c5",
-            game,
-        );
-        let mut mv_finder = MoveFinder::new(game.clone());
-
-        let best_move_result = mv_finder.get();
-        let expected_eval = 100;
-
-        assert!(best_move_result.is_some());
-        let (best_move, eval) = best_move_result.unwrap();
-        println!(
-            "white score: {}, black score: {}",
-            game.position().piece_score(Side::White),
-            game.position().piece_score(Side::Black)
-        );
-        println!("{}", game.position());
-        println!(
-            "\nbest move: {}; eval: {}\nexpected eval: {}",
-            best_move, eval, expected_eval
-        );
-        assert!(best_move.to_string() == "c4b5" || best_move.to_string() == "b3f3");
     }
 
     #[test]
