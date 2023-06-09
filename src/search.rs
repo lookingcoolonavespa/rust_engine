@@ -18,7 +18,7 @@ mod killer_mv_table;
 mod tt;
 
 pub type Depth = u8;
-pub const SEARCH_DEPTH: Depth = 8;
+pub const SEARCH_DEPTH: Depth = 7;
 const MAX_DEPTH: u8 = 12;
 const R: u8 = 2;
 
@@ -341,7 +341,7 @@ impl MoveFinder {
             let eval = -self.principal_variation_search(
                 depth - 1 - R,
                 -beta,
-                1 - beta,
+                -beta + 1,
                 levels_searched + 1,
                 killer_mv_table,
                 false,

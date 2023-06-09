@@ -151,8 +151,9 @@ impl State {
         self.fullmoves += 1;
     }
 
-    pub fn set_side_to_move(&mut self, side: Side) {
-        self.side_to_move = side;
+    pub fn revert_side_to_move(&mut self) {
+        self.zobrist.hash_side(self.side_to_move);
+        self.side_to_move = self.side_to_move.opposite();
     }
 
     pub fn update_side_to_move(&mut self) {

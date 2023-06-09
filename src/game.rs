@@ -701,14 +701,12 @@ impl Game {
     }
 
     pub fn make_null_move(&mut self) {
-        self.state
-            .set_side_to_move(self.state().side_to_move().opposite());
+        self.state.update_side_to_move();
         self.state.remove_en_passant();
     }
 
     pub fn unmake_null_move(&mut self, en_passant_option: Option<Square>) {
-        self.state
-            .set_side_to_move(self.state().side_to_move().opposite());
+        self.state.revert_side_to_move();
         if let Some(en_passant_sq) = en_passant_option {
             self.state.set_en_passant(en_passant_sq);
         }
@@ -1485,7 +1483,9 @@ pub mod test_is_legal {
 #[cfg(test)]
 pub mod test_make_move {
     use super::*;
-    use crate::{fen::STARTING_POSITION_FEN, piece_type::PromoteType, square::*};
+    use crate::{
+        fen::STARTING_POSITION_FEN, piece_type::PromoteType, square::*, state::zobrist::Zobrist,
+    };
 
     #[test]
     fn state_change_1() {
@@ -2062,6 +2062,7 @@ pub mod test_make_move {
         let mut game = result.unwrap();
         let en_passant_option = game.state().en_passant();
 
+        let initial_zobrist = game.state().zobrist().to_u64();
         game.make_null_move();
 
         assert_eq!(game.state().side_to_move(), Side::Black);
@@ -2069,6 +2070,7 @@ pub mod test_make_move {
         game.unmake_null_move(en_passant_option);
 
         assert_eq!(game.state().side_to_move(), Side::White);
+        assert_eq!(initial_zobrist, game.state().zobrist().to_u64());
     }
 
     #[test]
@@ -2084,12 +2086,19 @@ pub mod test_make_move {
             false,
         )));
 
-        let initial_zobrist = game.state().zobrist().to_u64();
+        let initial_zobrist = game.state().zobrist().clone();
         let en_passant_option = game.state().en_passant();
 
         let side = game.state().side_to_move();
         game.make_null_move();
         assert_eq!(game.state().side_to_move(), Side::White);
+        assert!(game.state().en_passant().is_none());
+
+        let mut expected_zobrist = initial_zobrist.clone();
+        expected_zobrist.hash_side(game.state().side_to_move());
+        expected_zobrist.hash_en_passant(en_passant_option);
+
+        assert_eq!(game.state().zobrist(), &expected_zobrist);
 
         let pseudo_legal_mv_list = game.pseudo_legal_moves(game.state().side_to_move());
         let legal_check_preprocessing = LegalCheckPreprocessing::from(&mut game, side);
@@ -2105,10 +2114,24 @@ pub mod test_make_move {
             game.unmake_move(*mv, capture, prev_state)
         }
 
+        assert_eq!(
+            game.state().zobrist().to_u64(),
+            expected_zobrist.to_u64(),
+            "zobrist after legal moves are made and unmade does not match expected_zobrist"
+        );
+        expected_zobrist.hash_side(game.state().side_to_move());
+        println!("{expected_zobrist} {}", game.state().side_to_move());
+        expected_zobrist.hash_en_passant(en_passant_option);
+
         game.unmake_null_move(en_passant_option);
+
         assert_eq!(game.state().side_to_move(), Side::Black);
         assert_eq!(game.state().en_passant(), Some(E3));
-        assert_eq!(game.state().zobrist().to_u64(), initial_zobrist);
+        assert_eq!(
+            game.state().zobrist().to_u64(),
+            initial_zobrist.to_u64(),
+            "zobrist after null move is unmade does not match initial zobrist"
+        );
     }
 }
 
@@ -2157,7 +2180,7 @@ pub mod test_zobrist {
         game.make_move(mv);
 
         let mut expected = start_zobrist.clone();
-        expected.hash_side(side.opposite());
+        expected.hash_side(game.state().side_to_move());
         expected.hash_piece(side, PieceType::Rook, H1);
         expected.hash_piece(side, PieceType::Rook, F1);
 
@@ -2174,7 +2197,7 @@ pub mod test_zobrist {
                 .get(&game.state.zobrist().to_u64())
                 .expect("zobrist was not found in zobrist table"),
             &1u8
-        )
+        );
     }
 
     #[test]
@@ -2190,7 +2213,7 @@ pub mod test_zobrist {
         game.make_move(mv);
 
         let mut expected = start_zobrist.clone();
-        expected.hash_side(side.opposite());
+        expected.hash_side(game.state().side_to_move());
         expected.hash_piece(side, PieceType::Rook, A8);
         expected.hash_piece(side, PieceType::Rook, D8);
 
@@ -2257,6 +2280,7 @@ pub mod test_zobrist {
         game.make_move(mv);
 
         let mut expected = start_zobrist;
+        expected.hash_side(game.state().side_to_move());
         expected.hash_en_passant(en_passant);
         expected.hash_piece(side, PieceType::Pawn, from);
         expected.hash_piece(side, PieceType::Pawn, to);
