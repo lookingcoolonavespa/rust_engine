@@ -30,10 +30,12 @@ impl Castle {
     }
 
     pub fn king_squares(&self, side: Side) -> (Square, Square) {
+        // returns the king squares in a tuple eg. (from, to)
         CASTLE_KING_MOVES[self.to_usize()][side.to_usize()]
     }
 
     pub fn rook_squares(&self, side: Side) -> (Square, Square) {
+        // returns the rook squares in a tuple eg. (from, to)
         CASTLE_ROOK_MOVES[self.to_usize()][side.to_usize()]
     }
 

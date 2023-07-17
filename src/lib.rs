@@ -18,6 +18,7 @@ mod square;
 mod state;
 pub mod uci;
 mod util;
+mod wasm;
 
 #[cfg(test)]
 extern crate unindent;

@@ -117,7 +117,7 @@ pub mod test_decode_algebra {
     }
 }
 
-fn algebra_to_move(move_notation: &str, game: &Game) -> Result<Move, String> {
+pub fn algebra_to_move(move_notation: &str, game: &Game) -> Result<Move, String> {
     if move_notation.len() < 4 || move_notation.len() > 5 {
         return Err("invalid move notation".to_string());
     }
@@ -506,7 +506,7 @@ pub mod test_input_position {
     }
 }
 
-fn move_to_algebra(mv: Move, side: Side) -> String {
+pub fn move_to_algebra(mv: Move, side: Side) -> String {
     match mv {
         Move::King(mv)
         | Move::Rook(mv)

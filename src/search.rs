@@ -270,7 +270,7 @@ impl MoveFinder {
             let eval: Eval = if self.game.is_draw() {
                 DRAW_SCORE.get(self.game.position().phase())
             } else {
-                -self.principal_variation_search(
+                -self.alpha_beta(
                     SEARCH_DEPTH - 1,
                     -beta,
                     -alpha,
@@ -308,7 +308,7 @@ impl MoveFinder {
         ))
     }
 
-    fn principal_variation_search(
+    fn alpha_beta(
         // https://www.chessprogramming.org/Principal_Variation_Search
         &mut self,
         depth: Depth,
@@ -338,7 +338,7 @@ impl MoveFinder {
         if do_null_move && !legal_check_preprocessing.in_check() && depth > R {
             let en_passant_option = self.game.state().en_passant();
             self.game.make_null_move();
-            let eval = -self.principal_variation_search(
+            let eval = -self.alpha_beta(
                 depth - 1 - R,
                 -beta,
                 -beta + 1,
@@ -391,7 +391,7 @@ impl MoveFinder {
             let eval = if self.game.is_draw() {
                 DRAW_SCORE.get(self.game.position().phase())
             } else if !found_pv {
-                -self.principal_variation_search(
+                -self.alpha_beta(
                     depth - 1,
                     -beta,
                     -alpha,
@@ -400,7 +400,7 @@ impl MoveFinder {
                     false,
                 )
             } else {
-                let mut score = -self.principal_variation_search(
+                let mut score = -self.alpha_beta(
                     depth - 1,
                     -alpha - 1,
                     -alpha,
@@ -411,7 +411,7 @@ impl MoveFinder {
 
                 // re-search
                 if score > alpha && score < beta {
-                    score = -self.principal_variation_search(
+                    score = -self.alpha_beta(
                         depth - 1,
                         -beta,
                         -alpha,
@@ -486,14 +486,7 @@ impl MoveFinder {
         }
 
         if legal_check_preprocessing.in_check() {
-            return self.principal_variation_search(
-                1,
-                alpha,
-                beta,
-                levels_searched,
-                killer_mv_table,
-                false,
-            );
+            return self.alpha_beta(1, alpha, beta, levels_searched, killer_mv_table, false);
         }
 
         // handle standpat score
