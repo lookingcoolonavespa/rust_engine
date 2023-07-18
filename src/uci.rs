@@ -119,7 +119,7 @@ pub mod test_decode_algebra {
 
 pub fn algebra_to_move(move_notation: &str, game: &Game) -> Result<Move, String> {
     if move_notation.len() < 4 || move_notation.len() > 5 {
-        return Err("invalid move notation".to_string());
+        return Err(format!("{} is invalid move notation", move_notation));
     }
     let (from, to, promote_pc) = decode_algebra(move_notation);
     let moving_piece_result = game.position().at(from);
@@ -342,6 +342,7 @@ pub fn input_position(input: &str, mut game: Game) -> Game {
                 }
                 Err(err) => {
                     println!("{}", err);
+                    panic!("{}", err);
                 }
             }
         }
