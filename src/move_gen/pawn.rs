@@ -6,7 +6,7 @@ use crate::{
 
 #[cfg(test)]
 fn get_w_pawn_pushes() -> [BB; 64] {
-    square::ALL.map(|sq| {
+    square::ALL_SQUARES.map(|sq| {
         let sq_bb = BB::new(sq);
         if sq.rank() == 0 || sq.rank() == 7 {
             bitboard::EMPTY
@@ -18,7 +18,7 @@ fn get_w_pawn_pushes() -> [BB; 64] {
 
 #[cfg(test)]
 fn get_w_pawn_captures() -> [BB; 64] {
-    square::ALL.map(|sq| {
+    square::ALL_SQUARES.map(|sq| {
         let sq_bb = BB::new(sq);
         let next_rank_mask = sq.rank_mask() << 8;
         if sq.rank() == 7 {
@@ -31,7 +31,7 @@ fn get_w_pawn_captures() -> [BB; 64] {
 
 #[cfg(test)]
 fn get_b_pawn_captures() -> [BB; 64] {
-    square::ALL.map(|sq| {
+    square::ALL_SQUARES.map(|sq| {
         let sq_bb = BB::new(sq);
         let next_rank_mask = sq.rank_mask() >> 8;
         if sq.rank() == 0 {
@@ -44,7 +44,7 @@ fn get_b_pawn_captures() -> [BB; 64] {
 
 #[cfg(test)]
 fn get_b_pawn_pushes() -> [BB; 64] {
-    square::ALL.map(|sq| {
+    square::ALL_SQUARES.map(|sq| {
         let sq_bb = BB::new(sq);
         if sq.rank() == 0 || sq.rank() == 7 {
             bitboard::EMPTY

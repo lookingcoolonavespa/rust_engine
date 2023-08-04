@@ -412,9 +412,9 @@ pub mod perft_promotion {
         let result = Game::from_fen(FEN);
         assert!(result.is_ok());
         let mut game = result.unwrap();
-        game = input_position(
+        input_position(
             "position fen n1n5/PPPk4/8/8/8/8/4Kppp/5N1N b - - 0 1 moves g2h1b e2d3 h1d5 d3d4 d7d6",
-            game,
+            &mut game,
         );
 
         let side = game.state().side_to_move();

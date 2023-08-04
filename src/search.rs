@@ -651,9 +651,9 @@ pub mod test_basic_tactics {
     #[test]
     fn debug_pos_3() {
         let mut game = Game::from_fen(STARTING_POSITION_FEN).unwrap();
-        game = uci::input_position(
+        uci::input_position(
             "position startpos moves a2a3 a7a5 b2b3 a5a4 b3a4 a8a4 c2c3 b7b5 d2d4 c7c6 e2e4 d7d5 e4d5 d8d5 h2h3 f7f6 h3h4 e7e6 b1d2 g7g6 h4h5 g6h5 h1h5 e6e5 f2f4 c8e6 d4e5 a4f4 e5f6 f4f5 h5f5 d5f5 g2g4 f5g4 d1g4 e6g4 c3c4 f8d6 f6f7 e8f7 g1e2 b5c4 d2c4 d6e7 a3a4 h7h5 c4e5 f7e6 e5g4 h5g4 a4a5 c6c5 a5a6",
-            game,
+            &mut game,
         );
         let mut mv_finder = MoveFinder::new(game.clone());
 
@@ -674,9 +674,9 @@ pub mod test_basic_tactics {
     #[test]
     fn debug_pos_4() {
         let mut game = Game::from_fen(STARTING_POSITION_FEN).unwrap();
-        game = uci::input_position(
+        uci::input_position(
             "position startpos moves b1c3 e7e6 d2d4 c7c6 e2e4 a7a6 g1f3 f8b4 a2a3 b4e7 c1f4 b7b5 h2h3 d7d6 e4e5 d6d5 b2b4 a6a5 b4a5 d8a5 f4d2 e7b4 c3b5 b4d2 d1d2 c6b5 d2a5 a8a5 a1b1 c8a6 a3a4 a5a4 f1b5 a6b5 b1b5 a4a1 e1d2 a1h1 b5b8 e8d7 f3g5 h1f1 d2e2 h7h6 e2f1 h6g5 b8b7 d7e8 c2c3 g8h6 b7a7 g5g4 f2f3 g4f3 f1g1 f3g2 g1g2 f7f6 e5f6 g7f6 a7a8 e8d7 a8h8 h6f5 h8f8 d7c6 f8f6 c6d7 g2g1 d7d6 f6f8 f5g3 f8c8 d6e7 c8b8 g3e2 g1f1 e2c3 h3h4 c3e4 h4h5 e4g3 f1f2 g3h5 f2e1 h5g3 e1d2 e6e5 d4e5 d5d4 d2d3 g3f1 d3d4 f1d2 d4e3 d2f1 e3e2 f1h2 b8b4 e7e6 b4e4 e6d7 e5e6 d7c6 e6e7 h2f1 e7e8q c6c5 e2f1 c5d5 e8e5 d5c6 e4b4 c6d7 b4b1 d7c6 b1a1 c6b6 a1b1 b6a6 b1a1 a6b6 a1b1 b6a6",
-            game,
+            &mut game,
         );
 
         let mut mv_finder = MoveFinder::new(game.clone());
@@ -698,9 +698,9 @@ pub mod test_basic_tactics {
     #[test]
     fn debug_pos_5() {
         let mut game = Game::from_fen(STARTING_POSITION_FEN).unwrap();
-        game = uci::input_position(
+        uci::input_position(
             "position startpos moves d2d4 c7c5 e2e3 c5d4 e3d4 d7d5 f1b5 c8d7 b5d7 b8d7 b1c3 e7e6 g1e2 a7a6 h2h3 g8f6 e1g1 f8d6 b2b3 a8c8 a2a4 e8g8 c1b2 d7b8 f2f4 b8c6 a1c1 h7h6 e2g3 c6d4 c3d5 f6d5 b2d4 d6f4 d1g4 f4e3 g1h1 d8g5 g4g5 h6g5 c1d1 e3d4 d1d4 c8c2 g3f5 c2e2 b3b4 g5g4 h3g4 f8d8 f5e7 g8f8 e7d5 d8d5 d4d5 e6d5 f1d1 e2e5 h1g1 f8e7 b4b5 a6a5 d1d2 e7e6 d2d4 e5e2 g4g5 f7f5 g2g3 b7b6 g1f1 e2e3 f1f2 e3a3 f2g2 g7g6 d4h4 a3a2 g2f1 e6d6 h4d4 d6e5 d4d1 d5d4 d1e1 e5d6 g3g4 f5g4 e1e4 a2a1 f1e2 d6d5 e4g4 a1a4 e2f3 a4a3 f3f4 a3a2 g4g1 a2e2 g1c1 e2f2 f4g4 f2e2 c1c6 e2g2 g4f4 g2g1 c6b6 a5a4 b6g6 g1f1 f4g4 a4a3 g6a6 f1a1 a6a8 a3a2 g4g3 a1g1 g3f2 a2a1q a8a1 g1a1 b5b6 a1b1 g5g6 b1b6 g6g7 b6g6 f2e1 g6g7 e1d1 g7g2 d1c1 d4d3 c1b1 g2c2 b1a1 c2d2 a1b1 d2c2 b1a1 c2d2 a1b1 d2e2 b1a1 d3d2 a1b1",
-            game,
+            &mut game,
         );
 
         let mut mv_finder = MoveFinder::new(game.clone());

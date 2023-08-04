@@ -35,7 +35,7 @@ pub fn main() {
                 mv_finder = mv_finder.set_game(game.clone());
             }
             input if input.starts_with("position") => {
-                game = input_position(&input_str, game);
+                input_position(&input_str, &mut game);
                 mv_finder = mv_finder.set_game(game.clone());
             }
             input if input.starts_with("go perft") => input_perft(&input_str, &mut game),
@@ -318,16 +318,16 @@ pub mod test_algebra_to_move {
     }
 }
 
-pub fn input_position(input: &str, mut game: Game) -> Game {
+pub fn input_position(input: &str, game: &mut Game) {
     let mut input = input[9..].to_owned() + " ";
     if input.contains("startpos") {
         input = input[9..].to_owned();
         let result = Game::from_fen(STARTING_POSITION_FEN);
-        game = result.unwrap();
+        *game = result.unwrap();
     } else if input.contains("fen") {
         input = input[4..].to_owned();
         let result = Game::from_fen(input.trim());
-        game = result.expect("invalid fen");
+        *game = result.expect("invalid fen");
     }
 
     if input.contains("moves") {
@@ -342,13 +342,11 @@ pub fn input_position(input: &str, mut game: Game) -> Game {
                 }
                 Err(err) => {
                     println!("{}", err);
-                    panic!("{}", err);
+                    panic!("{}\n{}", err, game.to_string());
                 }
             }
         }
     }
-
-    game
 }
 
 fn input_perft(input: &str, game: &mut Game) {
@@ -369,9 +367,9 @@ pub mod test_input_position {
         let fen = "r3k2r/8/8/8/8/8/8/R3K1NR w - - 0 1";
         let result = Game::from_fen(fen);
         assert!(result.is_ok());
-        let game = result.unwrap();
+        let mut game = result.unwrap();
 
-        let game = input_position("position startpos", game);
+        input_position("position startpos", &mut game);
         let position = game.position();
         let expected = unindent::unindent(
             "
@@ -396,9 +394,9 @@ pub mod test_input_position {
         let fen = "r3k2r/8/8/8/8/8/8/R3K1NR w - - 0 1";
         let result = Game::from_fen(fen);
         assert!(result.is_ok());
-        let game = result.unwrap();
+        let mut game = result.unwrap();
 
-        let game = input_position(&format!("position fen {}", fen), game);
+        input_position(&format!("position fen {}", fen), &mut game);
 
         let position = game.position();
         let expected = unindent::unindent(
@@ -424,9 +422,9 @@ pub mod test_input_position {
         let fen = "r3k2r/8/8/8/8/8/8/R3K1NR w - - 0 1";
         let result = Game::from_fen(fen);
         assert!(result.is_ok());
-        let game = result.unwrap();
+        let mut game = result.unwrap();
 
-        let game = input_position("position startpos moves e2e4 e7e5 g1f3 b8c6", game);
+        input_position("position startpos moves e2e4 e7e5 g1f3 b8c6", &mut game);
 
         let position = game.position();
         println!("{}", position.to_string());
@@ -453,9 +451,9 @@ pub mod test_input_position {
         let fen = STARTING_POSITION_FEN;
         let result = Game::from_fen(fen);
         assert!(result.is_ok());
-        let game = result.unwrap();
+        let mut game = result.unwrap();
 
-        let game = input_position("position startpos moves a2a3 b7b5", game);
+        input_position("position startpos moves a2a3 b7b5", &mut game);
 
         let position = game.position();
         println!("{}", position.to_string());
@@ -482,9 +480,9 @@ pub mod test_input_position {
         let fen = STARTING_POSITION_FEN;
         let result = Game::from_fen(fen);
         assert!(result.is_ok());
-        let game = result.unwrap();
-        let game = input_position("position startpos moves a2a3", game);
-        let game = input_position("position startpos moves a2a3 b7b5", game);
+        let mut game = result.unwrap();
+        input_position("position startpos moves a2a3", &mut game);
+        input_position("position startpos moves a2a3 b7b5", &mut game);
 
         let position = game.position();
         println!("{}", position.to_string());
@@ -498,6 +496,35 @@ pub mod test_input_position {
                 4|........|4
                 3|P.......|3
                 2|.PPPPPPP|2
+                1|RNBQKBNR|1
+                  ABCDEFGH
+                ",
+        );
+
+        assert_eq!(position.to_string(), expected);
+    }
+
+    #[test]
+    fn moves_fresh() {
+        let fen = STARTING_POSITION_FEN;
+        let result = Game::from_fen(fen);
+        assert!(result.is_ok());
+        let mut game = result.unwrap();
+        input_position("position startpos moves a2a3", &mut game);
+        input_position("position startpos moves e2e4 b7b5", &mut game);
+
+        let position = game.position();
+        println!("{}", position.to_string());
+        let expected = unindent::unindent(
+            "
+                  ABCDEFGH
+                8|rnbqkbnr|8
+                7|p.pppppp|7
+                6|........|6
+                5|.p......|5
+                4|....P...|4
+                3|........|3
+                2|PPPP.PPP|2
                 1|RNBQKBNR|1
                   ABCDEFGH
                 ",
