@@ -25,6 +25,11 @@ macro_rules! log {
 }
 
 #[wasm_bindgen]
+pub fn set_console_error_panic_hook() {
+    console_error_panic_hook::set_once();
+}
+
+#[wasm_bindgen]
 pub struct ClientGameInterface {
     game: Game,
     move_finder: MoveFinder,
@@ -303,15 +308,10 @@ impl ClientGameInterface {
     }
 
     pub fn from_history(history: &str) -> ClientGameInterface {
-        console_error_panic_hook::set_once();
-
-        let position_str = if history != "" {
-            format!("position startpos moves {}", history)
-        } else {
-            "position startpos".to_string()
-        };
         let mut game = Game::from_fen(STARTING_POSITION_FEN).unwrap();
-        input_position(&position_str, &mut game);
+        if history != "" {
+            input_position(&format!("position startpos moves {}", history), &mut game);
+        };
 
         ClientGameInterface {
             game: game.clone(),
@@ -320,8 +320,7 @@ impl ClientGameInterface {
     }
 
     pub fn make_move(&mut self, move_notation: &str) {
-        if move_notation == "" {
-        } else {
+        if move_notation != "" {
             input_position(&format!("position moves {}", move_notation), &mut self.game);
         }
     }
@@ -349,7 +348,12 @@ impl ClientGameInterface {
         let from = ALL_SQUARES[from as usize];
 
         let piece_result = self.game.position().at(from);
-        assert!(piece_result.is_some(), "no piece found at {}", from);
+        assert!(
+            piece_result.is_some(),
+            "no piece found at {}\n{}",
+            from,
+            self.game.position()
+        );
         let piece = piece_result.unwrap();
         let pseudo_legal_mv_list = self.pseudo_legal_moves_at_sq(from, piece);
 
