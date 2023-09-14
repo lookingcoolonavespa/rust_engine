@@ -1,13 +1,12 @@
-use std::ops::Mul;
+use std::ops::Shl;
 
 use crate::{bitboard::BB, square::Square};
 
 fn hyp_quint(from: Square, occupied: BB, mask: BB) -> BB {
     let masked_occupied = occupied & mask;
     let piece_bb = BB::new(from);
-    let positive_direction = (masked_occupied) - piece_bb.mul(BB(2u64));
-    let negative_direction =
-        ((masked_occupied).reverse() - piece_bb.reverse().mul(BB(2u64))).reverse();
+    let positive_direction = (masked_occupied) - piece_bb.shl(1);
+    let negative_direction = ((masked_occupied).reverse() - piece_bb.reverse().shl(1)).reverse();
     (positive_direction ^ negative_direction) & mask
 }
 

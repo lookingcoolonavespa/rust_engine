@@ -219,6 +219,12 @@ pub mod test {
     use super::*;
 
     #[test]
+    fn test() {
+        let val = 0u64.wrapping_sub(1u64);
+        println!("{}", val)
+    }
+
+    #[test]
     fn consts_1() {
         let expected = unindent::unindent(
             "

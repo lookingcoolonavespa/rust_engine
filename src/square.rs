@@ -77,7 +77,7 @@ impl Square {
     }
 
     pub fn rank_mask(self) -> BB {
-        ROW_1 << (DISTANCE_BETWEEN_RANKS * (self.0 >> NUM_OF_FILE_BITS))
+        ROW_1 << (DISTANCE_BETWEEN_RANKS * self.rank())
     }
 
     pub fn diagonal_mask(self) -> BB {
