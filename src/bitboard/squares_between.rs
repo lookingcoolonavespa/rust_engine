@@ -1,11 +1,13 @@
 use crate::bitboard::BB;
 use crate::square::Square;
 
+use super::BOARD_LENGTH;
+
 pub fn bb_squares_between(a: Square, b: Square) -> BB {
     SQUARES_BETWEEN[a.to_usize()][b.to_usize()]
 }
 
-static SQUARES_BETWEEN: [[BB; 64]; 64] = [
+static SQUARES_BETWEEN: [[BB; BOARD_LENGTH]; BOARD_LENGTH] = [
     [
         BB(0),
         BB(0),

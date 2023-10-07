@@ -2,7 +2,7 @@ use crate::{bitboard::BB, side::Side, square::Square};
 
 use super::{check_legal::LegalCheckPreprocessing, pseudo_legal};
 
-pub fn king_moves(
+pub fn king(
     from: Square,
     friendly_occupied: BB,
     legal_check_preprocessing: &LegalCheckPreprocessing,
@@ -11,26 +11,26 @@ pub fn king_moves(
         & !legal_check_preprocessing.controlled_squares_with_king_gone_bb()
 }
 
-pub fn knight_moves(from: Square, friendly_occupied: BB, check_ray: BB) -> BB {
+pub fn knight(from: Square, friendly_occupied: BB, check_ray: BB) -> BB {
     pseudo_legal::knight_attacks(from, friendly_occupied) & check_ray
 }
 
-pub fn bishop_moves(from: Square, friendly_occupied: BB, enemy_occupied: BB, check_ray: BB) -> BB {
+pub fn bishop(from: Square, friendly_occupied: BB, enemy_occupied: BB, check_ray: BB) -> BB {
     // check_ray includes the square of the checker
     pseudo_legal::bishop_attacks(from, friendly_occupied, enemy_occupied) & check_ray
 }
 
-pub fn queen_moves(from: Square, friendly_occupied: BB, enemy_occupied: BB, check_ray: BB) -> BB {
+pub fn queen(from: Square, friendly_occupied: BB, enemy_occupied: BB, check_ray: BB) -> BB {
     // check_ray includes the square of the checker
     pseudo_legal::queen_attacks(from, friendly_occupied, enemy_occupied) & check_ray
 }
 
-pub fn rook_moves(from: Square, friendly_occupied: BB, enemy_occupied: BB, check_ray: BB) -> BB {
+pub fn rook(from: Square, friendly_occupied: BB, enemy_occupied: BB, check_ray: BB) -> BB {
     // check_ray includes the square of the checker
     pseudo_legal::rook_attacks(from, friendly_occupied, enemy_occupied) & check_ray
 }
 
-pub fn pawn_moves(
+pub fn pawn(
     from: Square,
     friendly_occupied: BB,
     enemy_occupied: BB,

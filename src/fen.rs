@@ -1,11 +1,11 @@
 use std::collections::HashMap;
 
 use crate::{
-    bitboard::{self, BB},
+    bitboard::{self, BB, BOARD_LENGTH},
     mv::castle::Castle,
     phase::Phase,
     piece::Piece,
-    piece_type::PieceType,
+    piece_type::{PieceType, PIECE_TYPE_COUNT},
     side::Side,
     square::{self, Square},
     state::position::Position,
@@ -67,7 +67,7 @@ pub fn load_fen(fen: &str) -> Result<(Position, State), String> {
     ))
 }
 
-fn parse_fen_board(fen_board: &str) -> Result<([BB; 2], [BB; 6], Board), String> {
+fn parse_fen_board(fen_board: &str) -> Result<([BB; 2], [BB; PIECE_TYPE_COUNT], Board), String> {
     let mut bb_pieces = [
         bitboard::EMPTY,
         bitboard::EMPTY,
@@ -78,7 +78,7 @@ fn parse_fen_board(fen_board: &str) -> Result<([BB; 2], [BB; 6], Board), String>
     ];
 
     let mut bb_sides = [bitboard::EMPTY, bitboard::EMPTY];
-    let mut board: [Option<Piece>; 64] = [None; 64];
+    let mut board: [Option<Piece>; BOARD_LENGTH] = [None; BOARD_LENGTH];
 
     let mut rank = 7;
     let mut file = 0;

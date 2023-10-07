@@ -18,11 +18,11 @@ use crate::{
 use wasm_bindgen::prelude::*;
 
 //A macro to provide `println!(..)`-style syntax for `console.log` logging.
-macro_rules! log {
-    ( $( $t:tt )* ) => {
-        web_sys::console::log_1(&format!( $( $t )* ).into());
-    }
-}
+// macro_rules! log {
+//     ( $( $t:tt )* ) => {
+//         web_sys::console::log_1(&format!( $( $t )* ).into());
+//     }
+// }
 
 #[wasm_bindgen]
 pub fn set_console_error_panic_hook() {
@@ -213,49 +213,28 @@ impl ClientGameInterface {
                 let friendly_occupied = self.game.position().bb_side(side);
                 let enemy_occupied = self.game.position().bb_side(side.opposite());
 
-                match piece {
-                    PieceType::Pawn => {
-                        let pseudo_legal_moves = pseudo_legal::pawn(
-                            from,
-                            friendly_occupied,
-                            enemy_occupied,
-                            self.game.state().en_passant(),
-                            side,
-                        );
-
-                        pseudo_legal_moves.is_set(to)
-                    }
-                    PieceType::Knight => {
-                        let pseudo_legal_moves =
-                            pseudo_legal::knight_attacks(from, friendly_occupied);
-
-                        pseudo_legal_moves.is_set(to)
-                    }
+                let pseudo_legal_moves = match piece {
+                    PieceType::Pawn => pseudo_legal::pawn(
+                        from,
+                        friendly_occupied,
+                        enemy_occupied,
+                        self.game.state().en_passant(),
+                        side,
+                    ),
+                    PieceType::Knight => pseudo_legal::knight_attacks(from, friendly_occupied),
                     PieceType::Bishop => {
-                        let pseudo_legal_moves =
-                            pseudo_legal::bishop_attacks(from, friendly_occupied, enemy_occupied);
-
-                        pseudo_legal_moves.is_set(to)
+                        pseudo_legal::bishop_attacks(from, friendly_occupied, enemy_occupied)
                     }
                     PieceType::Rook => {
-                        let pseudo_legal_moves =
-                            pseudo_legal::rook_attacks(from, friendly_occupied, enemy_occupied);
-
-                        pseudo_legal_moves.is_set(to)
+                        pseudo_legal::rook_attacks(from, friendly_occupied, enemy_occupied)
                     }
                     PieceType::Queen => {
-                        let pseudo_legal_moves =
-                            pseudo_legal::queen_attacks(from, friendly_occupied, enemy_occupied);
-
-                        pseudo_legal_moves.is_set(to)
+                        pseudo_legal::queen_attacks(from, friendly_occupied, enemy_occupied)
                     }
-                    PieceType::King => {
-                        let pseudo_legal_moves =
-                            pseudo_legal::king_attacks(from, friendly_occupied);
+                    PieceType::King => pseudo_legal::king_attacks(from, friendly_occupied),
+                };
 
-                        pseudo_legal_moves.is_set(to)
-                    }
-                }
+                pseudo_legal_moves.is_set(to)
             }
             Move::Promotion(mv) => {
                 let (from, to) = mv.decode_into_squares();
@@ -323,6 +302,30 @@ impl ClientGameInterface {
         if move_notation != "" {
             input_position(&format!("position moves {}", move_notation), &mut self.game);
         }
+    }
+
+    pub fn is_promotion_move(&mut self, from: u32, to: u32) -> bool {
+        let at_from = self.game.position().at(Square(from as usize));
+        if at_from.is_none() {
+            return false;
+        }
+
+        let (side, pc) = at_from.unwrap().decode();
+        println!("side: {}, pieceType: {}", side, pc);
+        if pc != PieceType::Pawn {
+            return false;
+        }
+
+        let promote_rank_bb = if side == Side::White {
+            bitboard::ROW_8
+        } else {
+            bitboard::ROW_1
+        };
+        if !promote_rank_bb.is_set(Square(to as usize)) {
+            return false;
+        }
+
+        return self.validate_move(from, to, side == Side::White);
     }
 
     pub fn validate_move(&mut self, from: u32, to: u32, is_white: bool) -> bool {
@@ -559,5 +562,35 @@ mod test {
         let promote_piece = Some('k');
 
         ClientGameInterface::make_move_notation(from, to, promote_piece);
+    }
+
+    #[test]
+    fn is_promotion_1() {
+        let mut game = ClientGameInterface::from_history(
+            &unindent::unindent(
+                "e2e4 e7e5 b1c3 b8c6 f1c4 g8f6 g1f3 f8c5 d2d3 h7h6 c3d5 e8g8 d5f6 d8f6 c2c3 d7d6
+            b2b4 c5b6 e1g1 c6e7 a2a4 a7a5 b4a5 b6a5 c1b2 e7g6 d3d4 c8g4 h2h3 g4f3 d1f3 g6f4
+            c4a2 f4e6 f3d1 f8d8 a1c1 g8f8 a2d5 a8b8 d4e5 d6e5 b2a3 f8g8 d1e1 e6f4 d5c4 f4d3
+            c4d3 d8d3 a3b4 a5b6 a4a5 b6a7 c1d1 b8d8 d1d3 d8d3 e1e2 f6d8 b4e7 d8d7 e7a3 d3c3
+            a3b2 c3c5 f1a1 d7b5 e2d2 g8h7 a1c1 c5c1 d2c1 b5a5 b2c3 a5c5 c1b2 f7f6 h3h4 b7b5
+            b2d2 a7b6 c3b2 c7c6 h4h5 c5e7 b2a1 c6c5 d2d5 e7d8 d5d8 b6d8 a1b2 d8e7 g1h2 c5c4
+            h2g1 h7g8 b2c3 g8f7 f2f4 f7e6 f4f5 e6d7 g1f2 d7c6 f2f3 c6c5 c3a1 b5b4 a1b2 c4c3
+            b2c1 c5c4 f3e2 b4b3 e2d1 e7c5 g2g3 c4d3 d1e1 c3c2 e1f1 c5d4 f1g2 b3b2 c1b2 d4b2 g3g4",
+            )
+            .replace("\n", " "),
+        );
+
+        let is_promotion = game.is_promotion_move(square::C2.to_u32(), square::C1.to_u32());
+
+        assert!(is_promotion)
+    }
+
+    #[test]
+    fn is_promotion_2() {
+        let mut game = ClientGameInterface::from_history("");
+
+        let is_promotion = game.is_promotion_move(square::E2.to_u32(), square::E4.to_u32());
+
+        assert!(!is_promotion)
     }
 }

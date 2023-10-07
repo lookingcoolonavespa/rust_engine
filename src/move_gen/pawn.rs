@@ -1,11 +1,11 @@
 #[cfg(test)]
 use crate::{
-    bitboard::{self, BB},
+    bitboard::{self, BB, BOARD_LENGTH},
     square,
 };
 
 #[cfg(test)]
-fn get_w_pawn_pushes() -> [BB; 64] {
+fn get_w_pawn_pushes() -> [BB; BOARD_LENGTH] {
     square::ALL_SQUARES.map(|sq| {
         let sq_bb = BB::new(sq);
         if sq.rank() == 0 || sq.rank() == 7 {
@@ -17,7 +17,7 @@ fn get_w_pawn_pushes() -> [BB; 64] {
 }
 
 #[cfg(test)]
-fn get_w_pawn_captures() -> [BB; 64] {
+fn get_w_pawn_captures() -> [BB; BOARD_LENGTH] {
     square::ALL_SQUARES.map(|sq| {
         let sq_bb = BB::new(sq);
         let next_rank_mask = sq.rank_mask() << 8;
@@ -30,7 +30,7 @@ fn get_w_pawn_captures() -> [BB; 64] {
 }
 
 #[cfg(test)]
-fn get_b_pawn_captures() -> [BB; 64] {
+fn get_b_pawn_captures() -> [BB; BOARD_LENGTH] {
     square::ALL_SQUARES.map(|sq| {
         let sq_bb = BB::new(sq);
         let next_rank_mask = sq.rank_mask() >> 8;
@@ -43,7 +43,7 @@ fn get_b_pawn_captures() -> [BB; 64] {
 }
 
 #[cfg(test)]
-fn get_b_pawn_pushes() -> [BB; 64] {
+fn get_b_pawn_pushes() -> [BB; BOARD_LENGTH] {
     square::ALL_SQUARES.map(|sq| {
         let sq_bb = BB::new(sq);
         if sq.rank() == 0 || sq.rank() == 7 {

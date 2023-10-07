@@ -1,22 +1,21 @@
 use core::fmt;
 
 use crate::{
-    bitboard::{self, squares_between::bb_squares_between, BB},
+    bitboard::squares_between::bb_squares_between,
     fen,
     move_gen::{
         check_legal::{
-            is_en_passant_pinned_on_rank, is_legal_castle, is_legal_en_passant_move,
-            is_legal_king_move, is_legal_regular_move, pin_direction, LegalCheckPreprocessing,
+            is_legal_castle, is_legal_en_passant_move, is_legal_king_move, is_legal_regular_move,
+            LegalCheckPreprocessing,
         },
         escape_check,
-        pseudo_legal::{self, is_double_pawn_push},
     },
     move_list::MoveList,
     mv::{castle::Castle, Decode, EncodedMove, Move, PromotionMove},
     piece::Piece,
-    piece_type::{PieceType, PIECE_TYPE_MAP, PROMOTE_TYPE_ARR},
+    piece_type::{PieceType, PIECE_TYPE_MAP},
     side::Side,
-    square::{self, Square},
+    square::Square,
     state::position::Position,
     state::{EncodedState, State},
 };
@@ -56,131 +55,30 @@ impl Game {
             let piece_bb_iter = (*piece_bb & self.position().bb_side(side)).iter();
 
             for from in piece_bb_iter {
-                match piece_type {
-                    PieceType::Pawn => {
-                        let moves_bb = pseudo_legal::pawn(
-                            from,
-                            friendly_occupied,
-                            enemy_occupied,
-                            self.state().en_passant(),
-                            side,
-                        );
-
-                        let promote_rank_bb = if side == Side::White {
-                            bitboard::ROW_8
-                        } else {
-                            bitboard::ROW_1
-                        };
-
-                        for to in moves_bb.iter() {
-                            let is_capture = enemy_occupied.is_set(to);
-
-                            if to == self.state().en_passant().unwrap_or(square::NULL) {
-                                mv_list.push_move(Move::EnPassant(EncodedMove::new(
-                                    from,
-                                    to,
-                                    PieceType::Pawn,
-                                    true,
-                                )));
-                            } else if promote_rank_bb.is_set(to) {
-                                for promote_type in PROMOTE_TYPE_ARR.iter() {
-                                    mv_list.push_move(Move::Promotion(PromotionMove::new(
-                                        from,
-                                        to,
-                                        promote_type,
-                                        is_capture,
-                                    )))
-                                }
-                            } else if is_double_pawn_push(from, to, side) {
-                                mv_list.push_move(Move::DoublePawnPush(EncodedMove::new(
-                                    from,
-                                    to,
-                                    PieceType::Pawn,
-                                    false,
-                                )));
-                            } else {
-                                mv_list.push_move(Move::Pawn(EncodedMove::new(
-                                    from,
-                                    to,
-                                    PieceType::Pawn,
-                                    is_capture,
-                                )));
-                            }
-                        }
-                    }
-                    PieceType::Knight => {
-                        let moves_bb = pseudo_legal::knight_attacks(from, friendly_occupied);
-
-                        mv_list.insert_moves(from, moves_bb, |from, to| -> Move {
-                            Move::Piece(EncodedMove::new(
-                                from,
-                                to,
-                                PieceType::Knight,
-                                enemy_occupied.is_set(to),
-                            ))
-                        })
-                    }
-                    PieceType::Bishop => {
-                        let moves_bb =
-                            pseudo_legal::bishop_attacks(from, friendly_occupied, enemy_occupied);
-
-                        mv_list.insert_moves(from, moves_bb, |from, to| -> Move {
-                            Move::Piece(EncodedMove::new(
-                                from,
-                                to,
-                                PieceType::Bishop,
-                                enemy_occupied.is_set(to),
-                            ))
-                        })
-                    }
-                    PieceType::Rook => {
-                        let moves_bb =
-                            pseudo_legal::rook_attacks(from, friendly_occupied, enemy_occupied);
-
-                        mv_list.insert_moves(from, moves_bb, |from, to| -> Move {
-                            Move::Rook(EncodedMove::new(
-                                from,
-                                to,
-                                PieceType::Rook,
-                                enemy_occupied.is_set(to),
-                            ))
-                        })
-                    }
-                    PieceType::Queen => {
-                        let moves_bb =
-                            pseudo_legal::queen_attacks(from, friendly_occupied, enemy_occupied);
-
-                        mv_list.insert_moves(from, moves_bb, |from, to| -> Move {
-                            Move::Piece(EncodedMove::new(
-                                from,
-                                to,
-                                PieceType::Queen,
-                                enemy_occupied.is_set(to),
-                            ))
-                        })
-                    }
-                    PieceType::King => {
-                        let moves_bb = pseudo_legal::king_attacks(from, friendly_occupied);
-
-                        mv_list.insert_moves(from, moves_bb, |from, to| -> Move {
-                            Move::King(EncodedMove::new(
-                                from,
-                                to,
-                                PieceType::King,
-                                enemy_occupied.is_set(to),
-                            ))
-                        });
-
-                        let castle_rights = self.state().castle_rights();
-                        if castle_rights.can(side, Castle::Queenside) {
-                            mv_list.push_move(Move::Castle(Castle::Queenside))
-                        }
-                        if castle_rights.can(side, Castle::Kingside) {
-                            mv_list.push_move(Move::Castle(Castle::Kingside))
-                        }
-                    }
-                }
+                let moves_bb = piece_type.pseudo_legal_moves_bb(
+                    from,
+                    friendly_occupied,
+                    enemy_occupied,
+                    self.state(),
+                    side,
+                );
+                piece_type.push_bb_to_move_list(
+                    &mut mv_list,
+                    moves_bb,
+                    from,
+                    side,
+                    enemy_occupied,
+                    self.state(),
+                )
             }
+        }
+
+        let castle_rights = self.state().castle_rights();
+        if castle_rights.can(side, Castle::Queenside) {
+            mv_list.push_move(Move::Castle(Castle::Queenside))
+        }
+        if castle_rights.can(side, Castle::Kingside) {
+            mv_list.push_move(Move::Castle(Castle::Kingside))
         }
 
         mv_list
@@ -204,8 +102,7 @@ impl Game {
 
         if num_of_checkers > 1 {
             let from = self.position.king_sq(side);
-            let moves_bb =
-                escape_check::king_moves(from, friendly_occupied, legal_check_preprocessing);
+            let moves_bb = escape_check::king(from, friendly_occupied, legal_check_preprocessing);
 
             mv_list.insert_moves(from, moves_bb, |from, to| -> Move {
                 let encoded_mv =
@@ -222,140 +119,23 @@ impl Game {
                     | legal_check_preprocessing.checkers();
 
                 for from in piece_bb_iter {
-                    match piece_type {
-                        PieceType::Pawn => {
-                            let moves_bb = escape_check::pawn_moves(
-                                from,
-                                friendly_occupied,
-                                enemy_occupied,
-                                self.state().en_passant(),
-                                side,
-                                check_ray,
-                            );
-
-                            let promote_rank_bb = if side == Side::White {
-                                bitboard::ROW_8
-                            } else {
-                                bitboard::ROW_1
-                            };
-
-                            for to in moves_bb.iter() {
-                                let is_capture = enemy_occupied.is_set(to);
-
-                                if to == self.state().en_passant().unwrap_or(square::NULL) {
-                                    mv_list.push_move(Move::EnPassant(EncodedMove::new(
-                                        from,
-                                        to,
-                                        PieceType::Pawn,
-                                        true,
-                                    )));
-                                } else if promote_rank_bb.is_set(to) {
-                                    for promote_type in PROMOTE_TYPE_ARR.iter() {
-                                        mv_list.push_move(Move::Promotion(PromotionMove::new(
-                                            from,
-                                            to,
-                                            promote_type,
-                                            is_capture,
-                                        )))
-                                    }
-                                } else if is_double_pawn_push(from, to, side) {
-                                    mv_list.push_move(Move::DoublePawnPush(EncodedMove::new(
-                                        from,
-                                        to,
-                                        PieceType::Pawn,
-                                        false,
-                                    )));
-                                } else {
-                                    mv_list.push_move(Move::Pawn(EncodedMove::new(
-                                        from,
-                                        to,
-                                        PieceType::Pawn,
-                                        is_capture,
-                                    )));
-                                }
-                            }
-                        }
-                        PieceType::Knight => {
-                            let moves_bb =
-                                escape_check::knight_moves(from, friendly_occupied, check_ray);
-
-                            mv_list.insert_moves(from, moves_bb, |from, to| -> Move {
-                                Move::Piece(EncodedMove::new(
-                                    from,
-                                    to,
-                                    PieceType::Knight,
-                                    enemy_occupied.is_set(to),
-                                ))
-                            })
-                        }
-                        PieceType::Bishop => {
-                            let moves_bb = escape_check::bishop_moves(
-                                from,
-                                friendly_occupied,
-                                enemy_occupied,
-                                check_ray,
-                            );
-
-                            mv_list.insert_moves(from, moves_bb, |from, to| -> Move {
-                                Move::Piece(EncodedMove::new(
-                                    from,
-                                    to,
-                                    PieceType::Bishop,
-                                    enemy_occupied.is_set(to),
-                                ))
-                            })
-                        }
-                        PieceType::Rook => {
-                            let moves_bb = escape_check::rook_moves(
-                                from,
-                                friendly_occupied,
-                                enemy_occupied,
-                                check_ray,
-                            );
-
-                            mv_list.insert_moves(from, moves_bb, |from, to| -> Move {
-                                Move::Rook(EncodedMove::new(
-                                    from,
-                                    to,
-                                    PieceType::Rook,
-                                    enemy_occupied.is_set(to),
-                                ))
-                            })
-                        }
-                        PieceType::Queen => {
-                            let moves_bb = escape_check::queen_moves(
-                                from,
-                                friendly_occupied,
-                                enemy_occupied,
-                                check_ray,
-                            );
-
-                            mv_list.insert_moves(from, moves_bb, |from, to| -> Move {
-                                Move::Piece(EncodedMove::new(
-                                    from,
-                                    to,
-                                    PieceType::Queen,
-                                    enemy_occupied.is_set(to),
-                                ))
-                            })
-                        }
-                        PieceType::King => {
-                            let moves_bb = escape_check::king_moves(
-                                from,
-                                friendly_occupied,
-                                legal_check_preprocessing,
-                            );
-
-                            mv_list.insert_moves(from, moves_bb, |from, to| -> Move {
-                                Move::King(EncodedMove::new(
-                                    from,
-                                    to,
-                                    PieceType::King,
-                                    enemy_occupied.is_set(to),
-                                ))
-                            });
-                        }
-                    }
+                    let moves_bb = piece_type.pseudo_legal_escape_moves_bb(
+                        from,
+                        friendly_occupied,
+                        enemy_occupied,
+                        self.state(),
+                        side,
+                        legal_check_preprocessing,
+                        check_ray,
+                    );
+                    piece_type.push_bb_to_move_list(
+                        &mut mv_list,
+                        moves_bb,
+                        from,
+                        side,
+                        enemy_occupied,
+                        self.state(),
+                    );
                 }
             }
         }
@@ -364,7 +144,6 @@ impl Game {
     }
 
     pub fn pseudo_legal_loud_moves(&self, side: Side) -> MoveList {
-        // captures + promotions to queen/knight
         let friendly_occupied = self.position().bb_side(side);
         let enemy_occupied = self.position().bb_side(side.opposite());
 
@@ -374,95 +153,21 @@ impl Game {
             let piece_bb_iter = (*piece_bb & self.position().bb_sides()[side.to_usize()]).iter();
 
             for from in piece_bb_iter {
-                match piece_type {
-                    PieceType::Pawn => {
-                        let moves_bb = pseudo_legal::pawn(
-                            from,
-                            friendly_occupied,
-                            enemy_occupied,
-                            self.state().en_passant(),
-                            side,
-                        );
-
-                        let promote_rank_bb = if side == Side::White {
-                            bitboard::ROW_8
-                        } else {
-                            bitboard::ROW_1
-                        };
-
-                        for to in moves_bb.iter() {
-                            let is_capture = enemy_occupied.is_set(to);
-
-                            if to == self.state().en_passant().unwrap_or(square::NULL) {
-                                mv_list.push_move(Move::EnPassant(EncodedMove::new(
-                                    from,
-                                    to,
-                                    PieceType::Pawn,
-                                    true,
-                                )));
-                            } else if promote_rank_bb.is_set(to) {
-                                mv_list.push_move(Move::Promotion(PromotionMove::new(
-                                    from,
-                                    to,
-                                    &crate::piece_type::PromoteType::Queen,
-                                    is_capture,
-                                )));
-
-                                mv_list.push_move(Move::Promotion(PromotionMove::new(
-                                    from,
-                                    to,
-                                    &crate::piece_type::PromoteType::Knight,
-                                    is_capture,
-                                )))
-                            } else if is_capture {
-                                mv_list.push_move(Move::Pawn(EncodedMove::new(
-                                    from,
-                                    to,
-                                    PieceType::Pawn,
-                                    is_capture,
-                                )));
-                            }
-                        }
-                    }
-                    PieceType::Knight => {
-                        let moves_bb = pseudo_legal::knight_captures(from, enemy_occupied);
-
-                        mv_list.insert_moves(from, moves_bb, |from, to| -> Move {
-                            Move::Piece(EncodedMove::new(from, to, PieceType::Knight, true))
-                        })
-                    }
-                    PieceType::Bishop => {
-                        let moves_bb =
-                            pseudo_legal::bishop_captures(from, friendly_occupied, enemy_occupied);
-
-                        mv_list.insert_moves(from, moves_bb, |from, to| -> Move {
-                            Move::Piece(EncodedMove::new(from, to, PieceType::Bishop, true))
-                        })
-                    }
-                    PieceType::Rook => {
-                        let moves_bb =
-                            pseudo_legal::rook_captures(from, friendly_occupied, enemy_occupied);
-
-                        mv_list.insert_moves(from, moves_bb, |from, to| -> Move {
-                            Move::Rook(EncodedMove::new(from, to, PieceType::Rook, true))
-                        })
-                    }
-                    PieceType::Queen => {
-                        let moves_bb =
-                            pseudo_legal::queen_captures(from, friendly_occupied, enemy_occupied);
-
-                        mv_list.insert_moves(from, moves_bb, |from, to| -> Move {
-                            Move::Piece(EncodedMove::new(from, to, PieceType::Queen, true))
-                        })
-                    }
-                    PieceType::King => {
-                        let moves_bb = pseudo_legal::king_captures(from, enemy_occupied);
-
-                        mv_list.insert_moves(from, moves_bb, |from, to| -> Move {
-                            Move::King(EncodedMove::new(from, to, PieceType::King, true))
-                        });
-                    }
-                }
+                let moves_bb = piece_type.pseudo_legal_loud_moves_bb(
+                    from,
+                    friendly_occupied,
+                    enemy_occupied,
+                    self.state(),
+                    side,
+                );
+                piece_type.push_bb_to_move_list(
+                    &mut mv_list,
+                    moves_bb,
+                    from,
+                    side,
+                    enemy_occupied,
+                    self.state(),
+                );
             }
         }
 
@@ -942,118 +647,30 @@ impl Game {
         let friendly_occupied = self.position().bb_side(side);
         let enemy_occupied = self.position().bb_side(side.opposite());
 
-        let pinned = legal_check_preprocessing.pinned();
+        let pinned_pieces_bb = legal_check_preprocessing.pinned();
         let king_sq = self.position.king_sq(side);
-        let en_passant_capture_sq = self.state.en_passant_capture_sq();
 
         for (i, piece_bb) in self.position().bb_pieces().iter().enumerate() {
             let piece_type = PIECE_TYPE_MAP[i];
             let piece_bb_iter = (*piece_bb & self.position().bb_side(side)).iter();
 
             for from in piece_bb_iter {
-                match piece_type {
-                    PieceType::Pawn => {
-                        let en_passant = self.state.en_passant();
-                        let mut pseudo_legal_moves = pseudo_legal::pawn(
-                            from,
-                            friendly_occupied,
-                            enemy_occupied,
-                            en_passant,
-                            side,
-                        );
-                        let pinned = pinned.is_set(from);
-
-                        if en_passant.is_some()
-                            && pseudo_legal_moves.is_set(en_passant.unwrap())
-                            && is_en_passant_pinned_on_rank(
-                                self.position(),
-                                side,
-                                from,
-                                en_passant_capture_sq.unwrap(),
-                                king_sq,
-                            )
-                        {
-                            pseudo_legal_moves ^= BB::new(en_passant.unwrap());
-                        }
-
-                        if pseudo_legal_moves.empty() {
-                            continue;
-                        }
-
-                        if !pinned
-                            || (pseudo_legal_moves & pin_direction(from, king_sq)).not_empty()
-                        {
-                            return false;
-                        }
-                    }
-                    PieceType::Knight => {
-                        let pseudo_legal_moves =
-                            pseudo_legal::knight_attacks(from, friendly_occupied);
-                        let pinned = pinned.is_set(from);
-
-                        if pseudo_legal_moves.empty() || pinned {
-                            continue;
-                        } else {
-                            return false;
-                        }
-                    }
-                    PieceType::Bishop => {
-                        let pseudo_legal_moves =
-                            pseudo_legal::bishop_attacks(from, friendly_occupied, enemy_occupied);
-                        let pinned = pinned.is_set(from);
-
-                        if pseudo_legal_moves.empty() {
-                            continue;
-                        }
-
-                        if !pinned
-                            || (pseudo_legal_moves & pin_direction(from, king_sq)).not_empty()
-                        {
-                            return false;
-                        }
-                    }
-                    PieceType::Rook => {
-                        let pseudo_legal_moves =
-                            pseudo_legal::rook_attacks(from, friendly_occupied, enemy_occupied);
-                        let pinned = pinned.is_set(from);
-
-                        if pseudo_legal_moves.empty() {
-                            continue;
-                        }
-
-                        if !pinned
-                            || (pseudo_legal_moves & pin_direction(from, king_sq)).not_empty()
-                        {
-                            return false;
-                        }
-                    }
-                    PieceType::Queen => {
-                        let pseudo_legal_moves =
-                            pseudo_legal::queen_attacks(from, friendly_occupied, enemy_occupied);
-                        let pinned = pinned.is_set(from);
-
-                        if pseudo_legal_moves.empty() {
-                            continue;
-                        }
-
-                        if !pinned
-                            || (pseudo_legal_moves & pin_direction(from, king_sq)).not_empty()
-                        {
-                            return false;
-                        }
-                    }
-                    PieceType::King => {
-                        let safe_squares = pseudo_legal::king_attacks(from, friendly_occupied)
-                            & !legal_check_preprocessing.controlled_squares_with_king_gone_bb();
-                        if safe_squares.not_empty() {
-                            return false;
-                        }
-                    }
+                if piece_type.has_legal_moves(
+                    &self,
+                    from,
+                    friendly_occupied,
+                    enemy_occupied,
+                    side,
+                    pinned_pieces_bb,
+                    king_sq,
+                    legal_check_preprocessing,
+                ) {
+                    return false;
                 }
             }
         }
 
-        true
+        return true;
     }
 }
 
@@ -1424,14 +1041,46 @@ pub mod test_pseudo_legal {
             }
         }
 
-        assert_eq!(*mv_counter.get("promotion").unwrap(), 4);
-        assert_eq!(*mv_counter.get("king").unwrap(), 5);
-        assert_eq!(*mv_counter.get("castle").unwrap(), 2);
-        assert_eq!(*mv_counter.get("en passant").unwrap(), 1);
-        assert_eq!(*mv_counter.get("double pawn push").unwrap(), 1);
-        assert_eq!(*mv_counter.get("rook").unwrap(), 10);
-        assert_eq!(*mv_counter.get("piece").unwrap(), 0);
-        assert_eq!(*mv_counter.get("pawn").unwrap(), 2);
+        assert_eq!(
+            *mv_counter.get("promotion").unwrap(),
+            4,
+            "count of promotion moves is not correct"
+        );
+        assert_eq!(
+            *mv_counter.get("king").unwrap(),
+            5,
+            "count of king moves is not correct"
+        );
+        assert_eq!(
+            *mv_counter.get("castle").unwrap(),
+            2,
+            "count of castle moves is not correct"
+        );
+        assert_eq!(
+            *mv_counter.get("en passant").unwrap(),
+            1,
+            "count of en passant moves is not correct"
+        );
+        assert_eq!(
+            *mv_counter.get("double pawn push").unwrap(),
+            1,
+            "count of double pawn pushes is not correct"
+        );
+        assert_eq!(
+            *mv_counter.get("rook").unwrap(),
+            10,
+            "count of rook moves is not correct, count of double pawn pushes is not correct"
+        );
+        assert_eq!(
+            *mv_counter.get("piece").unwrap(),
+            0,
+            "count of piece moves is not correct"
+        );
+        assert_eq!(
+            *mv_counter.get("pawn").unwrap(),
+            2,
+            "count of single pawn pushes is not correct"
+        );
     }
 }
 
@@ -1482,7 +1131,9 @@ pub mod test_is_legal {
 pub mod test_make_move {
     use super::*;
     use crate::{
-        fen::STARTING_POSITION_FEN, piece_type::PromoteType, square::*, state::zobrist::Zobrist,
+        fen::STARTING_POSITION_FEN,
+        piece_type::PromoteType,
+        square::{self, *},
     };
 
     #[test]
@@ -3109,6 +2760,8 @@ pub mod test_is_checkmate {
 
 #[cfg(test)]
 pub mod test_escape_moves {
+    use crate::bitboard;
+
     use super::*;
 
     #[test]
@@ -3268,6 +2921,8 @@ pub mod test_escape_moves {
 
 #[cfg(test)]
 pub mod test_loud_moves {
+    use crate::bitboard;
+
     use super::*;
 
     #[test]

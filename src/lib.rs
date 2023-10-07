@@ -1,10 +1,10 @@
-mod attack_table;
 mod bitboard;
 mod eval;
 mod fen;
 mod game;
 mod move_gen;
 mod move_list;
+mod move_type;
 mod mv;
 mod perft;
 mod phase;

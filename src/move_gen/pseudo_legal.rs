@@ -45,6 +45,16 @@ pub fn pawn(
     en_passant: Option<Square>,
     color: Side,
 ) -> BB {
+    let en_passant_bb: BB = match en_passant {
+        Some(sq) => BB::new(sq),
+        None => bitboard::EMPTY,
+    };
+
+    (pawn_pushes(from, friendly_occupied, enemy_occupied, color))
+        | (pawn_attacks(from, color) & (enemy_occupied | en_passant_bb))
+}
+
+fn pawn_pushes(from: Square, friendly_occupied: BB, enemy_occupied: BB, color: Side) -> BB {
     let mut pushes =
         PAWN_PUSHES[color.to_usize()][from.to_usize()] & !(friendly_occupied | enemy_occupied);
 
@@ -56,17 +66,29 @@ pub fn pawn(
         };
         pushes |= double_push_bb;
     }
+
+    pushes & !(friendly_occupied | enemy_occupied)
+}
+
+fn pawn_attacks(from: Square, color: Side) -> BB {
+    PAWN_CAPTURES[color.to_usize()][from.to_usize()]
+}
+
+pub fn pawn_loud(
+    from: Square,
+    friendly_occupied: BB,
+    enemy_occupied: BB,
+    en_passant: Option<Square>,
+    color: Side,
+) -> BB {
     let en_passant_bb: BB = match en_passant {
         Some(sq) => BB::new(sq),
         None => bitboard::EMPTY,
     };
 
-    (pushes & !(friendly_occupied | enemy_occupied))
+    (pawn_pushes(from, friendly_occupied, enemy_occupied, color)
+        & (bitboard::ROW_1 | bitboard::ROW_8))
         | (pawn_attacks(from, color) & (enemy_occupied | en_passant_bb))
-}
-
-pub fn pawn_attacks(from: Square, color: Side) -> BB {
-    PAWN_CAPTURES[color.to_usize()][from.to_usize()]
 }
 
 pub fn is_double_pawn_push(from: Square, to: Square, side: Side) -> bool {

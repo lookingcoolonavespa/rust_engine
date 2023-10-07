@@ -1,5 +1,6 @@
 use crate::{
-    piece_type::{BISHOP_ID, KING_ID, KNIGHT_ID, PAWN_ID, QUEEN_ID, ROOK_ID},
+    bitboard::BOARD_LENGTH,
+    piece_type::{BISHOP_ID, KING_ID, KNIGHT_ID, PAWN_ID, PIECE_TYPE_COUNT, QUEEN_ID, ROOK_ID},
     score::Score,
 };
 use raw_psqt::*;
@@ -8,8 +9,8 @@ use raw_psqt::*;
 // scores for the remaining files ie. the score of the first file along the rank also applies to
 // the last file along the rank (score of a1 is equal to score of h1)
 type RawPsqt = [Score; 32];
-type Psqt = [Score; 64];
-type PsqtTable = [Psqt; 6];
+type Psqt = [Score; BOARD_LENGTH];
+type PsqtTable = [Psqt; PIECE_TYPE_COUNT];
 
 pub static PSQT: [PsqtTable; 2] = [generate_white_psqt(), generate_black_psqt()];
 
@@ -82,8 +83,8 @@ mod raw_psqt {
     ];
 }
 
-const fn get_piece_psqt(raw_psqt: [Score; 32]) -> [Score; 64] {
-    let mut psqt = [Score(0, 0, 0); 64];
+const fn get_piece_psqt(raw_psqt: [Score; 32]) -> [Score; BOARD_LENGTH] {
+    let mut psqt = [Score(0, 0, 0); BOARD_LENGTH];
     let mut rank = 0;
     while rank < 8 {
         let mut file = 0;
@@ -103,7 +104,7 @@ const fn get_piece_psqt(raw_psqt: [Score; 32]) -> [Score; 64] {
 
 const fn flip_pqst(psqt: Psqt) -> Psqt {
     // flip the raw psqt so the psqt is valid for black
-    let mut flipped_psqt = [Score(0, 0, 0); 64];
+    let mut flipped_psqt = [Score(0, 0, 0); BOARD_LENGTH];
 
     let max_rank = 7;
 
@@ -123,7 +124,7 @@ const fn flip_pqst(psqt: Psqt) -> Psqt {
     flipped_psqt
 }
 const fn generate_white_psqt() -> PsqtTable {
-    let mut psqt = [[Score(0, 0, 0); 64]; 6];
+    let mut psqt = [[Score(0, 0, 0); BOARD_LENGTH]; PIECE_TYPE_COUNT];
 
     psqt[PAWN_ID as usize] = PAWN_PSQT;
     psqt[KNIGHT_ID as usize] = get_piece_psqt(KNIGHT_PSQT);
@@ -135,7 +136,7 @@ const fn generate_white_psqt() -> PsqtTable {
     psqt
 }
 const fn generate_black_psqt() -> PsqtTable {
-    let mut psqt = [[Score(0, 0, 0); 64]; 6];
+    let mut psqt = [[Score(0, 0, 0); BOARD_LENGTH]; PIECE_TYPE_COUNT];
 
     psqt[PAWN_ID as usize] = flip_pqst(PAWN_PSQT);
     psqt[KNIGHT_ID as usize] = flip_pqst(get_piece_psqt(KNIGHT_PSQT));

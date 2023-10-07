@@ -1,29 +1,34 @@
 use core::fmt;
 
-use crate::bitboard::{self, BB};
+use crate::bitboard::{self, BB, BOARD_LENGTH};
 use crate::move_gen::is_sq_attacked;
 use crate::phase::Phase;
 use crate::piece::Piece;
-use crate::piece_type::PieceType;
+use crate::piece_type::{PieceType, PIECE_TYPE_COUNT};
 use crate::psqt::PSQT;
 use crate::side::*;
 use crate::square::Square;
 use crate::util::grid_to_string;
 
-pub type Board = [Option<Piece>; 64];
+pub type Board = [Option<Piece>; BOARD_LENGTH];
 pub type Scores = [i32; 2];
 
 #[derive(Clone, PartialEq, Copy)]
 pub struct Position {
     bb_sides: [BB; 2],
-    bb_pieces: [BB; 6],
-    board: [Option<Piece>; 64],
+    bb_pieces: [BB; PIECE_TYPE_COUNT],
+    board: [Option<Piece>; BOARD_LENGTH],
     piece_score: Scores,
     sq_score: Scores,
     phase: Phase,
 }
 impl Position {
-    pub fn new(bb_sides: [BB; 2], bb_pieces: [BB; 6], board: Board, phase: Phase) -> Position {
+    pub fn new(
+        bb_sides: [BB; 2],
+        bb_pieces: [BB; PIECE_TYPE_COUNT],
+        board: Board,
+        phase: Phase,
+    ) -> Position {
         let (piece_score, sq_score) = Position::calc_score(board, phase);
         Position {
             sq_score,
@@ -43,7 +48,7 @@ impl Position {
         self.bb_sides[Side::White.to_usize()] | (self.bb_sides[Side::Black.to_usize()])
     }
 
-    pub fn bb_pieces(&self) -> [BB; 6] {
+    pub fn bb_pieces(&self) -> [BB; PIECE_TYPE_COUNT] {
         self.bb_pieces
     }
 
@@ -83,6 +88,11 @@ impl Position {
     }
 
     pub fn at(&self, sq: Square) -> Option<Piece> {
+        debug_assert!(
+            sq.to_usize() < 64,
+            "square is out of bounds, square: {}",
+            sq
+        );
         self.board[sq.to_usize()]
     }
 

@@ -11,6 +11,8 @@ use std::{
 
 use crate::square::Square;
 
+pub const BOARD_LENGTH: usize = 64;
+
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub struct BB(pub u64);
 
@@ -325,7 +327,7 @@ pub mod test {
     }
 }
 
-pub static BISHOP_RAYS: [BB; 64] = [
+pub static BISHOP_RAYS: [BB; BOARD_LENGTH] = [
     BB(9241421688590303744),
     BB(36099303471056128),
     BB(141012904249856),
@@ -392,7 +394,7 @@ pub static BISHOP_RAYS: [BB; 64] = [
     BB(18049651735527937),
 ];
 
-pub static ROOK_RAYS: [BB; 64] = [
+pub static ROOK_RAYS: [BB; BOARD_LENGTH] = [
     BB(72340172838076926),
     BB(144680345676153597),
     BB(289360691352306939),
@@ -459,7 +461,7 @@ pub static ROOK_RAYS: [BB; 64] = [
     BB(9187484529235886208),
 ];
 
-pub static KNIGHT_JUMPS: [BB; 64] = [
+pub static KNIGHT_JUMPS: [BB; BOARD_LENGTH] = [
     BB(0x0000000000020400u64),
     BB(0x0000000000050800u64),
     BB(0x00000000000A1100u64),
@@ -526,7 +528,7 @@ pub static KNIGHT_JUMPS: [BB; 64] = [
     BB(0x0020400000000000u64),
 ];
 
-pub static KING_MOVES: [BB; 64] = [
+pub static KING_MOVES: [BB; BOARD_LENGTH] = [
     BB(0x0000000000000302u64),
     BB(0x0000000000000705u64),
     BB(0x0000000000000E0Au64),
@@ -593,7 +595,7 @@ pub static KING_MOVES: [BB; 64] = [
     BB(0x40C0000000000000u64),
 ];
 
-const W_PAWN_PUSHES: [BB; 64] = [
+const W_PAWN_PUSHES: [BB; BOARD_LENGTH] = [
     BB(0),
     BB(0),
     BB(0),
@@ -659,7 +661,7 @@ const W_PAWN_PUSHES: [BB; 64] = [
     BB(0),
     BB(0),
 ];
-const B_PAWN_PUSHES: [BB; 64] = [
+const B_PAWN_PUSHES: [BB; BOARD_LENGTH] = [
     BB(0),
     BB(0),
     BB(0),
@@ -726,9 +728,9 @@ const B_PAWN_PUSHES: [BB; 64] = [
     BB(0),
 ];
 
-pub static PAWN_PUSHES: [[BB; 64]; 2] = [W_PAWN_PUSHES, B_PAWN_PUSHES];
+pub static PAWN_PUSHES: [[BB; BOARD_LENGTH]; 2] = [W_PAWN_PUSHES, B_PAWN_PUSHES];
 
-const W_PAWN_CAPTURES: [BB; 64] = [
+const W_PAWN_CAPTURES: [BB; BOARD_LENGTH] = [
     BB(512),
     BB(1280),
     BB(2560),
@@ -795,7 +797,7 @@ const W_PAWN_CAPTURES: [BB; 64] = [
     BB(0),
 ];
 
-const B_PAWN_CAPTURES: [BB; 64] = [
+const B_PAWN_CAPTURES: [BB; BOARD_LENGTH] = [
     BB(0),
     BB(0),
     BB(0),
@@ -862,4 +864,4 @@ const B_PAWN_CAPTURES: [BB; 64] = [
     BB(18014398509481984),
 ];
 
-pub static PAWN_CAPTURES: [[BB; 64]; 2] = [W_PAWN_CAPTURES, B_PAWN_CAPTURES];
+pub static PAWN_CAPTURES: [[BB; BOARD_LENGTH]; 2] = [W_PAWN_CAPTURES, B_PAWN_CAPTURES];

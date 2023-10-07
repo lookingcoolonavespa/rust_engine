@@ -1,3 +1,4 @@
+use crate::piece_type::PIECE_TYPE_COUNT;
 use crate::{
     eval::{eval, DRAW_SCORE, MAX_EVAL},
     game::Game,
@@ -22,7 +23,7 @@ pub const SEARCH_DEPTH: Depth = 7;
 const MAX_DEPTH: u8 = 12;
 const R: u8 = 2;
 
-const MVV_LVA: [[u8; 6]; 6] = [
+const MVV_LVA: [[u8; PIECE_TYPE_COUNT]; PIECE_TYPE_COUNT] = [
     [15, 14, 13, 12, 11, 10], // victim P, attacker none, p, n , b, r, q, k
     [25, 24, 23, 22, 21, 20], // victim N, attacker none, p, n , b, r, q, k
     [35, 34, 33, 32, 31, 30], // victim B, attacker none, p, n , b, r, q, k
