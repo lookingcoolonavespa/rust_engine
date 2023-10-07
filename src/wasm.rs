@@ -4,12 +4,12 @@ use crate::{
     game::Game,
     move_gen::{
         check_legal::LegalCheckPreprocessing,
-        pseudo_legal::{self, is_double_pawn_push},
+        pseudo_legal::{self},
     },
     move_list::MoveList,
-    mv::{castle::Castle, Decode, EncodedMove, Move, PromotionMove},
+    mv::{Decode, Move},
     piece::Piece,
-    piece_type::{PieceType, PromoteType, PROMOTE_TYPE_ARR},
+    piece_type::{PieceType, PromoteType},
     search::MoveFinder,
     side::Side,
     square::{self, Square, ALL_SQUARES},
@@ -50,153 +50,37 @@ impl ClientGameInterface {
 
         let friendly_occupied = self.game.position().bb_side(side);
         let enemy_occupied = self.game.position().bb_side(side.opposite());
-        let pseudo_legal_mv_list: MoveList = match piece_type {
-            PieceType::Pawn => {
-                let mut mv_list = MoveList::new();
-                let en_passant = {
-                    let stm = self.game.state().side_to_move();
 
-                    if stm == side {
-                        self.game.state().en_passant()
-                    } else {
-                        None
-                    }
-                };
+        let en_passant = {
+            let stm = self.game.state().side_to_move();
 
-                let moves_bb =
-                    pseudo_legal::pawn(from, friendly_occupied, enemy_occupied, en_passant, side);
-
-                let promote_rank_bb = if side == Side::White {
-                    bitboard::ROW_8
-                } else {
-                    bitboard::ROW_1
-                };
-
-                for to in moves_bb.iter() {
-                    let is_capture = enemy_occupied.is_set(to);
-
-                    if to == en_passant.unwrap_or(square::NULL) {
-                        mv_list.push_move(Move::EnPassant(EncodedMove::new(
-                            from,
-                            to,
-                            PieceType::Pawn,
-                            true,
-                        )));
-                    } else if promote_rank_bb.is_set(to) {
-                        for promote_type in PROMOTE_TYPE_ARR.iter() {
-                            mv_list.push_move(Move::Promotion(PromotionMove::new(
-                                from,
-                                to,
-                                promote_type,
-                                is_capture,
-                            )))
-                        }
-                    } else if is_double_pawn_push(from, to, side) {
-                        mv_list.push_move(Move::DoublePawnPush(EncodedMove::new(
-                            from,
-                            to,
-                            PieceType::Pawn,
-                            false,
-                        )));
-                    } else {
-                        mv_list.push_move(Move::Pawn(EncodedMove::new(
-                            from,
-                            to,
-                            PieceType::Pawn,
-                            is_capture,
-                        )));
-                    }
-                }
-
-                mv_list
-            }
-            PieceType::Knight => {
-                let mut mv_list = MoveList::new();
-                let moves_bb = pseudo_legal::knight_attacks(from, friendly_occupied);
-
-                mv_list.insert_moves(from, moves_bb, |from, to| -> Move {
-                    Move::Piece(EncodedMove::new(
-                        from,
-                        to,
-                        PieceType::Knight,
-                        enemy_occupied.is_set(to),
-                    ))
-                });
-
-                mv_list
-            }
-            PieceType::Bishop => {
-                let mut mv_list = MoveList::new();
-                let moves_bb =
-                    pseudo_legal::bishop_attacks(from, friendly_occupied, enemy_occupied);
-
-                mv_list.insert_moves(from, moves_bb, |from, to| -> Move {
-                    Move::Piece(EncodedMove::new(
-                        from,
-                        to,
-                        PieceType::Bishop,
-                        enemy_occupied.is_set(to),
-                    ))
-                });
-
-                mv_list
-            }
-            PieceType::Rook => {
-                let mut mv_list = MoveList::new();
-                let moves_bb = pseudo_legal::rook_attacks(from, friendly_occupied, enemy_occupied);
-
-                mv_list.insert_moves(from, moves_bb, |from, to| -> Move {
-                    Move::Rook(EncodedMove::new(
-                        from,
-                        to,
-                        PieceType::Rook,
-                        enemy_occupied.is_set(to),
-                    ))
-                });
-
-                mv_list
-            }
-            PieceType::Queen => {
-                let mut mv_list = MoveList::new();
-                let moves_bb = pseudo_legal::queen_attacks(from, friendly_occupied, enemy_occupied);
-
-                mv_list.insert_moves(from, moves_bb, |from, to| -> Move {
-                    Move::Piece(EncodedMove::new(
-                        from,
-                        to,
-                        PieceType::Queen,
-                        enemy_occupied.is_set(to),
-                    ))
-                });
-
-                mv_list
-            }
-            PieceType::King => {
-                let mut mv_list = MoveList::new();
-                let moves_bb = pseudo_legal::king_attacks(from, friendly_occupied);
-
-                mv_list.insert_moves(from, moves_bb, |from, to| -> Move {
-                    Move::King(EncodedMove::new(
-                        from,
-                        to,
-                        PieceType::King,
-                        enemy_occupied.is_set(to),
-                    ))
-                });
-
-                let castle_rights = self.game.state().castle_rights();
-                if castle_rights.can(side, Castle::Queenside) {
-                    mv_list.push_move(Move::Castle(Castle::Queenside))
-                }
-                if castle_rights.can(side, Castle::Kingside) {
-                    mv_list.push_move(Move::Castle(Castle::Kingside))
-                }
-
-                mv_list
+            if stm == side {
+                self.game.state().en_passant()
+            } else {
+                None
             }
         };
+        let moves_bb = piece_type.pseudo_legal_loud_moves_bb(
+            from,
+            friendly_occupied,
+            enemy_occupied,
+            self.game.state(),
+            side,
+            en_passant,
+        );
 
-        pseudo_legal_mv_list
+        let mut mv_list: MoveList = MoveList::new();
+        piece_type.push_bb_to_move_list(
+            &mut mv_list,
+            moves_bb,
+            from,
+            side,
+            enemy_occupied,
+            self.game.state(),
+            en_passant,
+        );
+
+        mv_list
     }
 
     fn is_move_pseudo_legal(&self, mv: Move, side: Side) -> bool {
@@ -208,32 +92,19 @@ impl ClientGameInterface {
             | Move::EnPassant(mv)
             | Move::Piece(mv) => {
                 let (from, to) = mv.decode_into_squares();
-                let piece = mv.piece_type();
+                let piece_type = mv.piece_type();
 
                 let friendly_occupied = self.game.position().bb_side(side);
                 let enemy_occupied = self.game.position().bb_side(side.opposite());
 
-                let pseudo_legal_moves = match piece {
-                    PieceType::Pawn => pseudo_legal::pawn(
-                        from,
-                        friendly_occupied,
-                        enemy_occupied,
-                        self.game.state().en_passant(),
-                        side,
-                    ),
-                    PieceType::Knight => pseudo_legal::knight_attacks(from, friendly_occupied),
-                    PieceType::Bishop => {
-                        pseudo_legal::bishop_attacks(from, friendly_occupied, enemy_occupied)
-                    }
-                    PieceType::Rook => {
-                        pseudo_legal::rook_attacks(from, friendly_occupied, enemy_occupied)
-                    }
-                    PieceType::Queen => {
-                        pseudo_legal::queen_attacks(from, friendly_occupied, enemy_occupied)
-                    }
-                    PieceType::King => pseudo_legal::king_attacks(from, friendly_occupied),
-                };
-
+                let pseudo_legal_moves = piece_type.pseudo_legal_moves_bb(
+                    from,
+                    friendly_occupied,
+                    enemy_occupied,
+                    self.game.state(),
+                    side,
+                    self.game.state().en_passant(),
+                );
                 pseudo_legal_moves.is_set(to)
             }
             Move::Promotion(mv) => {

@@ -104,17 +104,10 @@ impl PieceType {
         enemy_occupied: BB,
         state: &State,
         side: Side,
+        en_passant: Option<Square>,
     ) -> BB {
         match self {
             PieceType::Pawn => {
-                let en_passant = {
-                    if state.side_to_move() == side {
-                        state.en_passant()
-                    } else {
-                        None
-                    }
-                };
-
                 pseudo_legal::pawn(from, friendly_occupied, enemy_occupied, en_passant, side)
             }
             PieceType::Knight => pseudo_legal::knight_attacks(from, friendly_occupied),
@@ -134,31 +127,20 @@ impl PieceType {
         from: Square,
         friendly_occupied: BB,
         enemy_occupied: BB,
-        state: &State,
         side: Side,
+        en_passant: Option<Square>,
         legal_check_preprocessing: &LegalCheckPreprocessing,
         check_ray: BB,
     ) -> BB {
         match self {
-            PieceType::Pawn => {
-                let en_passant = {
-                    let stm = state.side_to_move();
-                    if stm == side {
-                        state.en_passant()
-                    } else {
-                        None
-                    }
-                };
-
-                escape_check::pawn(
-                    from,
-                    friendly_occupied,
-                    enemy_occupied,
-                    en_passant,
-                    side,
-                    check_ray,
-                )
-            }
+            PieceType::Pawn => escape_check::pawn(
+                from,
+                friendly_occupied,
+                enemy_occupied,
+                en_passant,
+                side,
+                check_ray,
+            ),
             PieceType::Knight => escape_check::knight(from, friendly_occupied, check_ray),
             PieceType::Bishop => {
                 escape_check::bishop(from, friendly_occupied, enemy_occupied, check_ray)
@@ -182,18 +164,10 @@ impl PieceType {
         enemy_occupied: BB,
         state: &State,
         side: Side,
+        en_passant: Option<Square>,
     ) -> BB {
         match self {
             PieceType::Pawn => {
-                let en_passant = {
-                    let stm = state.side_to_move();
-                    if stm == side {
-                        state.en_passant()
-                    } else {
-                        None
-                    }
-                };
-
                 pseudo_legal::pawn_loud(from, friendly_occupied, enemy_occupied, en_passant, side)
             }
             PieceType::Knight => pseudo_legal::knight_captures(from, enemy_occupied),
@@ -216,21 +190,13 @@ impl PieceType {
         side: Side,
         enemy_occupied: BB,
         state: &State,
+        en_passant: Option<Square>,
     ) {
         return match self {
             PieceType::Pawn => {
                 let promote_rank_bb = bitboard::ROW_8 | bitboard::ROW_1;
 
                 for to in moves_bb.iter() {
-                    let en_passant = {
-                        let stm = state.side_to_move();
-                        if stm == side {
-                            state.en_passant()
-                        } else {
-                            None
-                        }
-                    };
-
                     let is_en_passant = to == en_passant.unwrap_or(square::NULL);
                     let is_capture = enemy_occupied.is_set(to) || is_en_passant;
 

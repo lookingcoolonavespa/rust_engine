@@ -61,6 +61,7 @@ impl Game {
                     enemy_occupied,
                     self.state(),
                     side,
+                    self.state().en_passant(),
                 );
                 piece_type.push_bb_to_move_list(
                     &mut mv_list,
@@ -69,6 +70,7 @@ impl Game {
                     side,
                     enemy_occupied,
                     self.state(),
+                    self.state().en_passant(),
                 )
             }
         }
@@ -123,8 +125,8 @@ impl Game {
                         from,
                         friendly_occupied,
                         enemy_occupied,
-                        self.state(),
                         side,
+                        self.state().en_passant(),
                         legal_check_preprocessing,
                         check_ray,
                     );
@@ -135,6 +137,7 @@ impl Game {
                         side,
                         enemy_occupied,
                         self.state(),
+                        self.state().en_passant(),
                     );
                 }
             }
@@ -159,6 +162,7 @@ impl Game {
                     enemy_occupied,
                     self.state(),
                     side,
+                    self.state().en_passant(),
                 );
                 piece_type.push_bb_to_move_list(
                     &mut mv_list,
@@ -167,6 +171,7 @@ impl Game {
                     side,
                     enemy_occupied,
                     self.state(),
+                    self.state().en_passant(),
                 );
             }
         }
