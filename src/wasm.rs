@@ -10,7 +10,7 @@ use crate::{
     mv::{Decode, Move},
     piece::Piece,
     piece_type::{PieceType, PromoteType},
-    search::MoveFinder,
+    search::{Depth, MoveFinder, DEFAULT_DEPTH, DEFAULT_MAX_DEPTH},
     side::Side,
     square::{self, Square, ALL_SQUARES},
     uci::{algebra_to_move, input_position, move_to_algebra},
@@ -52,15 +52,13 @@ impl ClientGameInterface {
         let enemy_occupied = self.game.position().bb_side(side.opposite());
 
         let en_passant = {
-            let stm = self.game.state().side_to_move();
-
-            if stm == side {
+            if self.game.state().side_to_move() == side {
                 self.game.state().en_passant()
             } else {
                 None
             }
         };
-        let moves_bb = piece_type.pseudo_legal_loud_moves_bb(
+        let moves_bb = piece_type.pseudo_legal_moves_bb(
             from,
             friendly_occupied,
             enemy_occupied,
@@ -157,6 +155,14 @@ impl ClientGameInterface {
         self.game.state().side_to_move().to_string()
     }
 
+    pub fn change_search_depth(&mut self, depth: Depth) {
+        self.move_finder.change_search_depth(depth)
+    }
+
+    pub fn change_max_depth(&mut self, depth: Depth) {
+        self.move_finder.change_max_depth(depth)
+    }
+
     pub fn from_history(history: &str) -> ClientGameInterface {
         let mut game = Game::from_fen(STARTING_POSITION_FEN).unwrap();
         if history != "" {
@@ -165,7 +171,7 @@ impl ClientGameInterface {
 
         ClientGameInterface {
             game: game.clone(),
-            move_finder: MoveFinder::new(game),
+            move_finder: MoveFinder::new(game, DEFAULT_DEPTH, DEFAULT_MAX_DEPTH),
         }
     }
 
@@ -175,7 +181,7 @@ impl ClientGameInterface {
         }
     }
 
-    pub fn is_promotion_move(&mut self, from: u32, to: u32) -> bool {
+    pub fn is_promotion(&mut self, from: u32, to: u32) -> bool {
         let at_from = self.game.position().at(Square(from as usize));
         if at_from.is_none() {
             return false;
@@ -344,7 +350,7 @@ impl ClientGameInterface {
                 promote_piece
             );
 
-            move_notation = format!("{}={}", move_notation, promote_piece);
+            move_notation = format!("{}{}", move_notation, promote_piece);
         }
 
         move_notation
@@ -418,7 +424,7 @@ mod test {
         let to = 1;
         let promote_piece = Some('q');
 
-        let expected = "a1b1=q";
+        let expected = "a1b1q";
         assert_eq!(
             ClientGameInterface::make_move_notation(from, to, promote_piece),
             expected
@@ -451,7 +457,7 @@ mod test {
             .replace("\n", " "),
         );
 
-        let is_promotion = game.is_promotion_move(square::C2.to_u32(), square::C1.to_u32());
+        let is_promotion = game.is_promotion(square::C2.to_u32(), square::C1.to_u32());
 
         assert!(is_promotion)
     }
@@ -460,8 +466,19 @@ mod test {
     fn is_promotion_2() {
         let mut game = ClientGameInterface::from_history("");
 
-        let is_promotion = game.is_promotion_move(square::E2.to_u32(), square::E4.to_u32());
+        let is_promotion = game.is_promotion(square::E2.to_u32(), square::E4.to_u32());
 
         assert!(!is_promotion)
+    }
+
+    #[test]
+    fn legal_moves_at_sq_1() {
+        let mut game = ClientGameInterface::from_history("");
+
+        let legal_sqs = game.legal_moves_at_sq(square::E2.to_u32());
+
+        println!("{:?}", legal_sqs.iter().map(|v| Square(*v as usize)));
+
+        assert_eq!(legal_sqs.len(), 2);
     }
 }

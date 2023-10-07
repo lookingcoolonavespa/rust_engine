@@ -9,6 +9,9 @@ use crate::{
     side::Side,
 };
 
+pub const DEFAULT_DEPTH: Depth = 7;
+pub const DEFAULT_MAX_DEPTH: Depth = 12;
+
 // todo!("fix stalemate bug");
 use self::{
     killer_mv_table::KillerMoveTable,
@@ -19,8 +22,6 @@ mod killer_mv_table;
 mod tt;
 
 pub type Depth = u8;
-pub const SEARCH_DEPTH: Depth = 7;
-const MAX_DEPTH: u8 = 12;
 const R: u8 = 2;
 
 const MVV_LVA: [[u8; PIECE_TYPE_COUNT]; PIECE_TYPE_COUNT] = [
@@ -66,18 +67,35 @@ impl TtDetails {
 pub struct MoveFinder {
     tt: TranspositionTable,
     game: Game,
+    depth: Depth,
+    max_depth: Depth,
 }
 
 impl MoveFinder {
-    pub fn new(game: Game) -> MoveFinder {
+    pub fn new(game: Game, depth: Depth, max_depth: Depth) -> MoveFinder {
         MoveFinder {
+            depth,
+            max_depth,
             game,
             tt: TranspositionTable::new(),
         }
     }
 
     pub fn set_game(self, game: Game) -> MoveFinder {
-        MoveFinder { game, tt: self.tt }
+        MoveFinder {
+            game,
+            depth: DEFAULT_DEPTH,
+            max_depth: DEFAULT_MAX_DEPTH,
+            tt: self.tt,
+        }
+    }
+
+    pub fn change_search_depth(&mut self, depth: Depth) {
+        self.depth = depth
+    }
+
+    pub fn change_max_depth(&mut self, depth: Depth) {
+        self.max_depth = depth
     }
 
     pub fn score_moves_with_killer_moves(
@@ -252,11 +270,11 @@ impl MoveFinder {
                 .pseudo_legal_escape_moves(stm, &legal_check_preprocessing)
         };
 
-        let mut killer_mv_table = KillerMoveTable::new();
+        let mut killer_mv_table = KillerMoveTable::new(self.depth);
 
         let tt_mv_result = self
             .tt
-            .probe_move(self.game.state().zobrist().to_u64(), SEARCH_DEPTH);
+            .probe_move(self.game.state().zobrist().to_u64(), self.depth);
         let mut scores = self.score_moves(&self.game, &pseudo_legal_mv_list, tt_mv_result.as_ref());
 
         for i in 0..pseudo_legal_mv_list.list().len() {
@@ -272,7 +290,7 @@ impl MoveFinder {
                 DRAW_SCORE.get(self.game.position().phase())
             } else {
                 -self.alpha_beta(
-                    SEARCH_DEPTH - 1,
+                    self.depth - 1,
                     -beta,
                     -alpha,
                     1,
@@ -298,7 +316,7 @@ impl MoveFinder {
 
         self.tt.store(
             self.game.state().zobrist().to_u64(),
-            SEARCH_DEPTH,
+            self.depth,
             TtFlag::Exact,
             alpha,
             best_move,
@@ -482,7 +500,7 @@ impl MoveFinder {
         let stm = self.game.state().side_to_move();
         let legal_check_preprocessing = LegalCheckPreprocessing::from(&mut self.game, stm);
 
-        if levels_searched == MAX_DEPTH {
+        if levels_searched == self.max_depth {
             return eval(&mut self.game, &legal_check_preprocessing, levels_searched);
         }
 
@@ -554,7 +572,7 @@ pub mod test_basic_tactics {
         let result = Game::from_fen(fen);
         assert!(result.is_ok());
         let game = result.unwrap();
-        let mut mv_finder = MoveFinder::new(game);
+        let mut mv_finder = MoveFinder::new(game, DEFAULT_DEPTH, DEFAULT_MAX_DEPTH);
 
         let best_move_result = mv_finder.get();
         let expected = Move::Piece(EncodedMove::new(E6, E8, PieceType::Queen, true));
@@ -570,9 +588,9 @@ pub mod test_basic_tactics {
         let result = Game::from_fen(fen);
         assert!(result.is_ok());
         let game = result.unwrap();
-        let mut mv_evaluator = MoveFinder::new(game);
+        let mut mv_finder = MoveFinder::new(game, DEFAULT_DEPTH, DEFAULT_MAX_DEPTH);
 
-        let best_move_result = mv_evaluator.get();
+        let best_move_result = mv_finder.get();
         let expected = Move::Piece(EncodedMove::new(G3, F1, PieceType::Knight, false));
 
         assert!(best_move_result.is_some());
@@ -596,9 +614,9 @@ pub mod test_basic_tactics {
             PieceType::Pawn,
             false,
         )));
-        let mut mv_evaluator = MoveFinder::new(game);
+        let mut mv_finder = MoveFinder::new(game, DEFAULT_DEPTH, DEFAULT_MAX_DEPTH);
 
-        let best_move_result = mv_evaluator.get();
+        let best_move_result = mv_finder.get();
 
         assert!(best_move_result.is_some());
         let (best_move, _) = best_move_result.unwrap();
@@ -611,9 +629,9 @@ pub mod test_basic_tactics {
         let result = Game::from_fen(fen);
         assert!(result.is_ok());
         let game = result.unwrap();
-        let mut mv_evaluator = MoveFinder::new(game.clone());
+        let mut mv_finder = MoveFinder::new(game.clone(), DEFAULT_DEPTH, DEFAULT_MAX_DEPTH);
 
-        let best_move_result = mv_evaluator.get();
+        let best_move_result = mv_finder.get();
         let expected = Move::Rook(EncodedMove::new(H1, H7, PieceType::Rook, true));
 
         println!("{}", game.position());
@@ -633,7 +651,7 @@ pub mod test_basic_tactics {
             Game::from_fen("rn1qkbnr/ppp2ppp/3p4/4p3/2B1P3/5b2/PPPP1PPP/RNBQK2R w KQkq - 0 1")
                 .unwrap();
 
-        let mut mv_finder = MoveFinder::new(game.clone());
+        let mut mv_finder = MoveFinder::new(game.clone(), DEFAULT_DEPTH, DEFAULT_MAX_DEPTH);
 
         let best_move_result = mv_finder.get();
 
@@ -656,7 +674,7 @@ pub mod test_basic_tactics {
             "position startpos moves a2a3 a7a5 b2b3 a5a4 b3a4 a8a4 c2c3 b7b5 d2d4 c7c6 e2e4 d7d5 e4d5 d8d5 h2h3 f7f6 h3h4 e7e6 b1d2 g7g6 h4h5 g6h5 h1h5 e6e5 f2f4 c8e6 d4e5 a4f4 e5f6 f4f5 h5f5 d5f5 g2g4 f5g4 d1g4 e6g4 c3c4 f8d6 f6f7 e8f7 g1e2 b5c4 d2c4 d6e7 a3a4 h7h5 c4e5 f7e6 e5g4 h5g4 a4a5 c6c5 a5a6",
             &mut game,
         );
-        let mut mv_finder = MoveFinder::new(game.clone());
+        let mut mv_finder = MoveFinder::new(game.clone(), DEFAULT_DEPTH, DEFAULT_MAX_DEPTH);
 
         let best_move_result = mv_finder.get();
 
@@ -680,7 +698,7 @@ pub mod test_basic_tactics {
             &mut game,
         );
 
-        let mut mv_finder = MoveFinder::new(game.clone());
+        let mut mv_finder = MoveFinder::new(game.clone(), DEFAULT_DEPTH, DEFAULT_MAX_DEPTH);
 
         let best_move_result = mv_finder.get();
 
@@ -704,7 +722,7 @@ pub mod test_basic_tactics {
             &mut game,
         );
 
-        let mut mv_finder = MoveFinder::new(game.clone());
+        let mut mv_finder = MoveFinder::new(game.clone(), DEFAULT_DEPTH, DEFAULT_MAX_DEPTH);
 
         let best_move_result = mv_finder.get();
 

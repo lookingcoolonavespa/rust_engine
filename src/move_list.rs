@@ -1,5 +1,6 @@
 use crate::{bitboard::BB, mv::Move, square::Square};
 
+#[derive(Debug)]
 pub struct MoveList(Vec<Move>);
 
 impl MoveList {

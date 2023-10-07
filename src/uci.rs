@@ -7,7 +7,7 @@ use crate::{
     mv::{castle::Castle, Decode, EncodedMove, Move, PromotionMove},
     perft::count_moves_debug,
     piece_type::{PieceType, PromoteType},
-    search::MoveFinder,
+    search::{MoveFinder, DEFAULT_DEPTH, DEFAULT_MAX_DEPTH},
     side::Side,
     square::{self, Square},
 };
@@ -15,7 +15,7 @@ use crate::{
 pub fn main() {
     let mut game = Game::from_fen(STARTING_POSITION_FEN)
         .expect("game is not loading the starting position fen correctly");
-    let mut mv_finder = MoveFinder::new(game.clone());
+    let mut mv_finder = MoveFinder::new(game.clone(), DEFAULT_DEPTH, DEFAULT_MAX_DEPTH);
 
     loop {
         let mut input_str = String::new();
@@ -123,7 +123,7 @@ pub fn algebra_to_move(move_notation: &str, game: &Game) -> Result<Move, String>
     }
     let (from, to, promote_pc) = decode_algebra(move_notation);
     let moving_piece_result = game.position().at(from);
-    match moving_piece_result {
+    return match moving_piece_result {
         Some(pc) => {
             let piece_type = pc.piece_type();
             let side = pc.side();
@@ -210,7 +210,7 @@ pub fn algebra_to_move(move_notation: &str, game: &Game) -> Result<Move, String>
             }
         }
         None => Err(format!("no piece at {from}")),
-    }
+    };
 }
 
 #[cfg(test)]
