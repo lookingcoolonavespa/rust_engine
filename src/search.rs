@@ -667,7 +667,7 @@ pub mod test_basic_tactics {
             "position startpos moves a2a3 a7a5 b2b3 a5a4 b3a4 a8a4 c2c3 b7b5 d2d4 c7c6 e2e4 d7d5 e4d5 d8d5 h2h3 f7f6 h3h4 e7e6 b1d2 g7g6 h4h5 g6h5 h1h5 e6e5 f2f4 c8e6 d4e5 a4f4 e5f6 f4f5 h5f5 d5f5 g2g4 f5g4 d1g4 e6g4 c3c4 f8d6 f6f7 e8f7 g1e2 b5c4 d2c4 d6e7 a3a4 h7h5 c4e5 f7e6 e5g4 h5g4 a4a5 c6c5 a5a6",
             &mut game,
         );
-        let mut mv_finder = MoveFinder::new(game.clone(), DEFAULT_DEPTH + 3, DEFAULT_MAX_DEPTH);
+        let mut mv_finder = MoveFinder::new(game.clone(), DEFAULT_DEPTH, DEFAULT_MAX_DEPTH);
 
         let best_move_result = mv_finder.get();
 

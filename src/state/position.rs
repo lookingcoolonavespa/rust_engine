@@ -107,7 +107,6 @@ impl Position {
             crate::bitboard::EMPTY,
         );
 
-        format!("hey {}", piece_type);
         self.board[from.to_usize()] = None;
 
         self.piece_score[side.to_usize()] -= piece_type.score() as i32;
@@ -144,6 +143,7 @@ impl Position {
     }
 
     pub fn move_piece(&mut self, piece_type: PieceType, from: Square, to: Square, side: Side) {
+        println!("moving {} from {} to {}", piece_type, from, to);
         self.remove_piece(piece_type, from, side);
         self.place_piece(piece_type, to, side);
     }

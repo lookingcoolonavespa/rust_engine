@@ -7,7 +7,7 @@ use crate::{
         pseudo_legal::{self},
     },
     move_list::MoveList,
-    mv::{Decode, Move},
+    mv::{castle::Castle, Decode, Move},
     piece::Piece,
     piece_type::{PieceType, PromoteType},
     search::{Depth, MoveFinder, DEFAULT_DEPTH, DEFAULT_MAX_DEPTH},
@@ -75,6 +75,15 @@ impl ClientGameInterface {
             enemy_occupied,
             en_passant,
         );
+        if piece_type == PieceType::King {
+            let castle_rights = self.game.state().castle_rights();
+            if castle_rights.can(side, Castle::Queenside) {
+                mv_list.push_move(Move::Castle(Castle::Queenside))
+            }
+            if castle_rights.can(side, Castle::Kingside) {
+                mv_list.push_move(Move::Castle(Castle::Kingside))
+            }
+        }
 
         mv_list
     }
@@ -236,7 +245,9 @@ impl ClientGameInterface {
             Vec::with_capacity(pseudo_legal_mv_list.list().len() as usize);
         let legal_check_preprocessing = LegalCheckPreprocessing::from(&mut game, side);
         for mv in pseudo_legal_mv_list.list() {
+            println!("{mv}");
             if game.is_legal(*mv, &legal_check_preprocessing) {
+                println!("is legal");
                 match mv {
                     Move::King(mv)
                     | Move::Rook(mv)
@@ -477,12 +488,18 @@ mod test {
 
     #[test]
     fn legal_moves_castling() {
-        let mut game = ClientGameInterface::from_history("e2e4 d7d5 f1e2 c1d2 g1f3 b8c6");
+        let mut game = ClientGameInterface::from_history("e2e4 d7d5 f1e2 c8d7 g1f3 b8c6");
 
         let legal_sqs = game.legal_moves_at_sq(square::E1.to_u32());
 
-        println!("{:?}", legal_sqs.iter().map(|v| Square(*v as usize)));
+        println!(
+            "{:?}",
+            legal_sqs
+                .iter()
+                .map(|v| Square(*v as usize).to_string())
+                .collect::<Vec<String>>()
+        );
 
-        assert_eq!(legal_sqs.len(), 3);
+        assert_eq!(legal_sqs.len(), 2);
     }
 }
