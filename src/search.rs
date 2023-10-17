@@ -131,8 +131,7 @@ impl MoveFinder {
                                 to,
                                 mv,
                                 game.position(),
-                                game.position()
-                                    .bb_side(game.state().side_to_move().opposite())
+                                game.position().bb_side(game.state().side_to_move().opposite())
                             );
                             let attacker = mv.piece_type();
                             let capture = game.position().at(to).unwrap().piece_type();
@@ -266,15 +265,12 @@ impl MoveFinder {
         let mut pseudo_legal_mv_list = if legal_check_preprocessing.num_of_checkers() == 0 {
             self.game.pseudo_legal_moves(stm)
         } else {
-            self.game
-                .pseudo_legal_escape_moves(stm, &legal_check_preprocessing)
+            self.game.pseudo_legal_escape_moves(stm, &legal_check_preprocessing)
         };
 
         let mut killer_mv_table = KillerMoveTable::new(self.depth);
 
-        let tt_mv_result = self
-            .tt
-            .probe_move(self.game.state().zobrist().to_u64(), self.depth);
+        let tt_mv_result = self.tt.probe_move(self.game.state().zobrist().to_u64(), self.depth);
         let mut scores = self.score_moves(&self.game, &pseudo_legal_mv_list, tt_mv_result.as_ref());
 
         for i in 0..pseudo_legal_mv_list.list().len() {
@@ -373,16 +369,13 @@ impl MoveFinder {
 
         // getting pseudo legal moves
         let mut pseudo_legal_mv_list = if legal_check_preprocessing.in_check() {
-            self.game
-                .pseudo_legal_escape_moves(stm, &legal_check_preprocessing)
+            self.game.pseudo_legal_escape_moves(stm, &legal_check_preprocessing)
         } else {
             self.game.pseudo_legal_moves(stm)
         };
 
         // scores moves
-        let tt_mv_result = self
-            .tt
-            .probe_move(self.game.state().zobrist().to_u64(), depth);
+        let tt_mv_result = self.tt.probe_move(self.game.state().zobrist().to_u64(), depth);
         let mut scores = self.score_moves_with_killer_moves(
             &self.game,
             &pseudo_legal_mv_list,
@@ -668,13 +661,13 @@ pub mod test_basic_tactics {
     }
 
     #[test]
-    fn debug_pos_3() {
+    fn debug_pos_stop_promotion() {
         let mut game = Game::from_fen(STARTING_POSITION_FEN).unwrap();
         uci::input_position(
             "position startpos moves a2a3 a7a5 b2b3 a5a4 b3a4 a8a4 c2c3 b7b5 d2d4 c7c6 e2e4 d7d5 e4d5 d8d5 h2h3 f7f6 h3h4 e7e6 b1d2 g7g6 h4h5 g6h5 h1h5 e6e5 f2f4 c8e6 d4e5 a4f4 e5f6 f4f5 h5f5 d5f5 g2g4 f5g4 d1g4 e6g4 c3c4 f8d6 f6f7 e8f7 g1e2 b5c4 d2c4 d6e7 a3a4 h7h5 c4e5 f7e6 e5g4 h5g4 a4a5 c6c5 a5a6",
             &mut game,
         );
-        let mut mv_finder = MoveFinder::new(game.clone(), DEFAULT_DEPTH, DEFAULT_MAX_DEPTH);
+        let mut mv_finder = MoveFinder::new(game.clone(), DEFAULT_DEPTH + 3, DEFAULT_MAX_DEPTH);
 
         let best_move_result = mv_finder.get();
 

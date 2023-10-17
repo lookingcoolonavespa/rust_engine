@@ -62,7 +62,6 @@ impl ClientGameInterface {
             from,
             friendly_occupied,
             enemy_occupied,
-            self.game.state(),
             side,
             en_passant,
         );
@@ -74,7 +73,6 @@ impl ClientGameInterface {
             from,
             side,
             enemy_occupied,
-            self.game.state(),
             en_passant,
         );
 
@@ -99,7 +97,6 @@ impl ClientGameInterface {
                     from,
                     friendly_occupied,
                     enemy_occupied,
-                    self.game.state(),
                     side,
                     self.game.state().en_passant(),
                 );
@@ -206,11 +203,7 @@ impl ClientGameInterface {
     }
 
     pub fn validate_move(&mut self, from: u32, to: u32, is_white: bool) -> bool {
-        let side = if is_white == true {
-            Side::White
-        } else {
-            Side::Black
-        };
+        let side = if is_white == true { Side::White } else { Side::Black };
 
         let move_notation = ClientGameInterface::move_notation_from_numbers(from, to);
 
@@ -480,5 +473,16 @@ mod test {
         println!("{:?}", legal_sqs.iter().map(|v| Square(*v as usize)));
 
         assert_eq!(legal_sqs.len(), 2);
+    }
+
+    #[test]
+    fn legal_moves_castling() {
+        let mut game = ClientGameInterface::from_history("e2e4 d7d5 f1e2 c1d2 g1f3 b8c6");
+
+        let legal_sqs = game.legal_moves_at_sq(square::E1.to_u32());
+
+        println!("{:?}", legal_sqs.iter().map(|v| Square(*v as usize)));
+
+        assert_eq!(legal_sqs.len(), 3);
     }
 }

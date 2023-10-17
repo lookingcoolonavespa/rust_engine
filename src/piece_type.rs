@@ -13,7 +13,6 @@ use crate::{
     mv::{EncodedMove, Move, PromotionMove},
     side::Side,
     square::{self, Square},
-    state::State,
 };
 
 pub const PIECE_TYPE_COUNT: usize = 6;
@@ -102,7 +101,6 @@ impl PieceType {
         from: Square,
         friendly_occupied: BB,
         enemy_occupied: BB,
-        state: &State,
         side: Side,
         en_passant: Option<Square>,
     ) -> BB {
@@ -162,7 +160,6 @@ impl PieceType {
         from: Square,
         friendly_occupied: BB,
         enemy_occupied: BB,
-        state: &State,
         side: Side,
         en_passant: Option<Square>,
     ) -> BB {
@@ -189,7 +186,6 @@ impl PieceType {
         from: Square,
         side: Side,
         enemy_occupied: BB,
-        state: &State,
         en_passant: Option<Square>,
     ) {
         return match self {

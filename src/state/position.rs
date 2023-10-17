@@ -104,9 +104,10 @@ impl Position {
 
         debug_assert_eq!(
             self.bb_sides[side.to_usize()] & from_bb,
-            crate::bitboard::EMPTY
+            crate::bitboard::EMPTY,
         );
 
+        format!("hey {}", piece_type);
         self.board[from.to_usize()] = None;
 
         self.piece_score[side.to_usize()] -= piece_type.score() as i32;

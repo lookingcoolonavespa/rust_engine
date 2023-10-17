@@ -59,7 +59,6 @@ impl Game {
                     from,
                     friendly_occupied,
                     enemy_occupied,
-                    self.state(),
                     side,
                     self.state().en_passant(),
                 );
@@ -69,7 +68,6 @@ impl Game {
                     from,
                     side,
                     enemy_occupied,
-                    self.state(),
                     self.state().en_passant(),
                 )
             }
@@ -136,7 +134,6 @@ impl Game {
                         from,
                         side,
                         enemy_occupied,
-                        self.state(),
                         self.state().en_passant(),
                     );
                 }
@@ -160,7 +157,6 @@ impl Game {
                     from,
                     friendly_occupied,
                     enemy_occupied,
-                    self.state(),
                     side,
                     self.state().en_passant(),
                 );
@@ -170,7 +166,6 @@ impl Game {
                     from,
                     side,
                     enemy_occupied,
-                    self.state(),
                     self.state().en_passant(),
                 );
             }

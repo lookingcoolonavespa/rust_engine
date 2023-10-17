@@ -53,7 +53,7 @@ pub fn eval(
                 .bb_pc(crate::piece_type::PieceType::Pawn, side.opposite()),
         ) as i32;
 
-    sq_score + piece_score + center_control + king_safety_bonus
+    sq_score + piece_score + center_control + king_safety_bonus + mobility_bonus
 }
 
 const INNER_CENTER_CONTROL_MULTIPLER: u32 = 30;

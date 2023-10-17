@@ -1,6 +1,5 @@
 use crate::{
     bitboard::{BB, KING_MOVES},
-    side::Side,
     square::Square,
 };
 

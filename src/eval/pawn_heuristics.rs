@@ -52,7 +52,7 @@ pub fn passed_isolated_double_backward_pawns_count(
 
 #[cfg(test)]
 mod test_pawn_heuristics {
-    use crate::{game::Game, piece_type::PAWN_ID};
+    use crate::{game::Game, piece_type::PieceType};
 
     use super::*;
 
@@ -65,7 +65,7 @@ mod test_pawn_heuristics {
 
         let expected = (1, 1, 1, 1);
         let actual = passed_isolated_double_backward_pawns_count(
-            game.position().bb_pieces()[PAWN_ID as usize],
+            game.position().bb_pieces()[PieceType::Pawn.to_usize()],
             game.position().bb_side(Side::White),
             Side::White,
         );

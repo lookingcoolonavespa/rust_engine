@@ -31,7 +31,7 @@ impl Phase {
 
 #[cfg(test)]
 mod test {
-    use crate::{fen::STARTING_POSITION_FEN, game::Game, piece_type::PAWN_ID};
+    use crate::{fen::STARTING_POSITION_FEN, game::Game, piece_type::PieceType};
 
     use super::*;
 
@@ -44,7 +44,7 @@ mod test {
         assert_eq!(
             Phase::get(
                 game.position().bb_occupied(),
-                game.position().bb_pieces()[PAWN_ID as usize],
+                game.position().bb_pieces()[PieceType::Pawn.to_usize()],
                 game.state().fullmoves()
             )
             .to_string(),
@@ -55,7 +55,7 @@ mod test {
             game.position().phase().to_string(),
             Phase::get(
                 game.position().bb_occupied(),
-                game.position().bb_pieces()[PAWN_ID as usize],
+                game.position().bb_pieces()[PieceType::Pawn.to_usize()],
                 game.state().fullmoves()
             )
             .to_string()
