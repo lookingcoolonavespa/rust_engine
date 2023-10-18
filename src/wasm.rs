@@ -189,13 +189,14 @@ impl ClientGameInterface {
         let game = Game::from_fen(STARTING_POSITION_FEN).unwrap();
 
         let mut interface = ClientGameInterface {
-            board_states: Vec::new(),
+            board_states: vec![],
             history: Vec::new(),
             game: game.clone(),
-            move_finder: MoveFinder::new(game, DEFAULT_DEPTH, DEFAULT_MAX_DEPTH),
+            move_finder: MoveFinder::new(DEFAULT_DEPTH, DEFAULT_MAX_DEPTH),
         };
-        let moves = moves_str.trim().split(' ');
+        interface.board_states.push(interface.to_string());
 
+        let moves = moves_str.trim().split(' ');
         for move_notation in moves {
             if move_notation == "" {
                 break;
@@ -211,12 +212,12 @@ impl ClientGameInterface {
         match mv_result {
             Ok(mv) => {
                 self.game.make_move(mv);
-                self.board_states.push(self.game.to_string());
+                self.board_states.push(self.to_string());
                 self.history.push(mv.to_algebra());
             }
             Err(err) => {
                 println!("{}", err);
-                panic!("{}\n{}", err, self.game.to_string());
+                panic!("{}\n{}", err, self.to_string());
             }
         }
     }
@@ -308,7 +309,7 @@ impl ClientGameInterface {
     }
 
     pub fn engine_move(&mut self) -> String {
-        let (best_move, _) = self.move_finder.get().unwrap();
+        let (best_move, _) = self.move_finder.get(&mut self.game).unwrap();
 
         move_to_algebra(best_move, self.game.state().side_to_move())
     }

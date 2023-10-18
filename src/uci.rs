@@ -15,13 +15,11 @@ use crate::{
 pub fn main() {
     let mut game = Game::from_fen(STARTING_POSITION_FEN)
         .expect("game is not loading the starting position fen correctly");
-    let mut mv_finder = MoveFinder::new(game.clone(), DEFAULT_DEPTH, DEFAULT_MAX_DEPTH);
+    let mut mv_finder = MoveFinder::new(DEFAULT_DEPTH, DEFAULT_MAX_DEPTH);
 
     loop {
         let mut input_str = String::new();
-        io::stdin()
-            .read_line(&mut input_str)
-            .expect("failed to read line");
+        io::stdin().read_line(&mut input_str).expect("failed to read line");
 
         match input_str.trim() {
             "uci" => {
@@ -32,11 +30,9 @@ pub fn main() {
             }
             "ucinewgame" => {
                 game = input_uci_new_game();
-                mv_finder = mv_finder.set_game(game.clone());
             }
             input if input.starts_with("position") => {
                 input_position(&input_str, &mut game);
-                mv_finder = mv_finder.set_game(game.clone());
             }
             input if input.starts_with("go perft") => input_perft(&input_str, &mut game),
             input if input.starts_with("go") => input_go(&mut game, &mut mv_finder),
@@ -614,7 +610,7 @@ pub mod test_move_to_algebra {
 
 fn input_go(game: &mut Game, mv_finder: &mut MoveFinder) {
     // search for best move
-    let (best_move, _) = mv_finder.get().unwrap();
+    let (best_move, _) = mv_finder.get(game).unwrap();
     let algebra = move_to_algebra(best_move, game.state().side_to_move());
     println!("bestmove {}", algebra);
 }
