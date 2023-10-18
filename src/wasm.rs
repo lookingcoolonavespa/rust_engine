@@ -13,16 +13,9 @@ use crate::{
     search::{Depth, MoveFinder, DEFAULT_DEPTH, DEFAULT_MAX_DEPTH},
     side::Side,
     square::{self, Square, ALL_SQUARES},
-    uci::{algebra_to_move, input_position, move_to_algebra},
+    uci::{algebra_to_move, move_to_algebra},
 };
 use wasm_bindgen::prelude::*;
-
-//A macro to provide `println!(..)`-style syntax for `console.log` logging.
-// macro_rules! log {
-//     ( $( $t:tt )* ) => {
-//         web_sys::console::log_1(&format!( $( $t )* ).into());
-//     }
-// }
 
 #[wasm_bindgen]
 pub fn set_console_error_panic_hook() {
@@ -33,6 +26,8 @@ pub fn set_console_error_panic_hook() {
 pub struct ClientGameInterface {
     game: Game,
     move_finder: MoveFinder,
+    board_states: Vec<String>,
+    history: Vec<String>,
 }
 
 impl ClientGameInterface {
@@ -161,6 +156,27 @@ impl ClientGameInterface {
         self.game.state().side_to_move().to_string()
     }
 
+    pub fn board_state(&self, i: usize) -> String {
+        self.board_states[i].clone()
+    }
+
+    pub fn history(&self) -> String {
+        self.history
+            .iter()
+            .enumerate()
+            .fold(String::new(), |history, (i, notation)| {
+                return if i % 2 == 0 {
+                    let move_no = i / 2 + 1;
+
+                    format!("{} {}. {}", history, move_no, notation)
+                } else {
+                    format!("{} {}", history, notation)
+                };
+            })
+            .trim()
+            .to_string()
+    }
+
     pub fn change_search_depth(&mut self, depth: Depth) {
         self.move_finder.change_search_depth(depth)
     }
@@ -169,21 +185,39 @@ impl ClientGameInterface {
         self.move_finder.change_max_depth(depth)
     }
 
-    pub fn from_history(history: &str) -> ClientGameInterface {
-        let mut game = Game::from_fen(STARTING_POSITION_FEN).unwrap();
-        if history != "" {
-            input_position(&format!("position startpos moves {}", history), &mut game);
-        };
+    pub fn from_moves_str(moves_str: &str) -> ClientGameInterface {
+        let game = Game::from_fen(STARTING_POSITION_FEN).unwrap();
 
-        ClientGameInterface {
+        let mut interface = ClientGameInterface {
+            board_states: Vec::new(),
+            history: Vec::new(),
             game: game.clone(),
             move_finder: MoveFinder::new(game, DEFAULT_DEPTH, DEFAULT_MAX_DEPTH),
+        };
+        let moves = moves_str.trim().split(' ');
+
+        for move_notation in moves {
+            if move_notation == "" {
+                break;
+            };
+            interface.make_move(move_notation);
         }
+
+        interface
     }
 
     pub fn make_move(&mut self, move_notation: &str) {
-        if move_notation != "" {
-            input_position(&format!("position moves {}", move_notation), &mut self.game);
+        let mv_result = algebra_to_move(move_notation, &self.game);
+        match mv_result {
+            Ok(mv) => {
+                self.game.make_move(mv);
+                self.board_states.push(self.game.to_string());
+                self.history.push(mv.to_algebra());
+            }
+            Err(err) => {
+                println!("{}", err);
+                panic!("{}\n{}", err, self.game.to_string());
+            }
         }
     }
 
@@ -367,7 +401,7 @@ mod test {
 
     #[test]
     fn test_to_string() {
-        let game = ClientGameInterface::from_history("");
+        let game = ClientGameInterface::from_moves_str("");
         let expected = "rnbqkbnrpppppppp................................PPPPPPPPRNBQKBNR";
 
         assert_eq!(game.to_string(), expected)
@@ -375,7 +409,7 @@ mod test {
 
     #[test]
     fn test_to_string_2() {
-        let game = ClientGameInterface::from_history("e2e4 e7e5");
+        let game = ClientGameInterface::from_moves_str("e2e4 e7e5");
         let expected = "rnbqkbnrpppp.ppp............p.......P...........PPPP.PPPRNBQKBNR";
 
         assert_eq!(game.to_string(), expected)
@@ -447,7 +481,7 @@ mod test {
 
     #[test]
     fn is_promotion_1() {
-        let mut game = ClientGameInterface::from_history(
+        let mut game = ClientGameInterface::from_moves_str(
             &unindent::unindent(
                 "e2e4 e7e5 b1c3 b8c6 f1c4 g8f6 g1f3 f8c5 d2d3 h7h6 c3d5 e8g8 d5f6 d8f6 c2c3 d7d6
             b2b4 c5b6 e1g1 c6e7 a2a4 a7a5 b4a5 b6a5 c1b2 e7g6 d3d4 c8g4 h2h3 g4f3 d1f3 g6f4
@@ -468,7 +502,7 @@ mod test {
 
     #[test]
     fn is_promotion_2() {
-        let mut game = ClientGameInterface::from_history("");
+        let mut game = ClientGameInterface::from_moves_str("");
 
         let is_promotion = game.is_promotion(square::E2.to_u32(), square::E4.to_u32());
 
@@ -477,7 +511,7 @@ mod test {
 
     #[test]
     fn legal_moves_at_sq_1() {
-        let mut game = ClientGameInterface::from_history("");
+        let mut game = ClientGameInterface::from_moves_str("");
 
         let legal_sqs = game.legal_moves_at_sq(square::E2.to_u32());
 
@@ -488,7 +522,7 @@ mod test {
 
     #[test]
     fn legal_moves_castling() {
-        let mut game = ClientGameInterface::from_history("e2e4 d7d5 f1e2 c8d7 g1f3 b8c6");
+        let mut game = ClientGameInterface::from_moves_str("e2e4 d7d5 f1e2 c8d7 g1f3 b8c6");
 
         let legal_sqs = game.legal_moves_at_sq(square::E1.to_u32());
 
@@ -501,5 +535,14 @@ mod test {
         );
 
         assert_eq!(legal_sqs.len(), 2);
+    }
+
+    #[test]
+    fn test_history() {
+        let game = ClientGameInterface::from_moves_str("e2e4 d7d5 f1e2 c8d7 g1f3 b8c6");
+
+        let history = game.history();
+
+        assert_eq!(history, "1. e4 d5 2. Be2 Bd7 3. Nf3 Nc6");
     }
 }

@@ -30,23 +30,29 @@ pub enum Move {
 impl fmt::Display for Move {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Move::King(encoded_mv)
-            | Move::Rook(encoded_mv)
-            | Move::Pawn(encoded_mv)
-            | Move::Piece(encoded_mv)
-            | Move::DoublePawnPush(encoded_mv)
-            | Move::EnPassant(encoded_mv) => {
-                let (from, to) = encoded_mv.decode_into_squares();
-                write!(f, "{}{}", from, to)
-            }
+            Move::King(mv)
+            | Move::Rook(mv)
+            | Move::Pawn(mv)
+            | Move::DoublePawnPush(mv)
+            | Move::Piece(mv)
+            | Move::EnPassant(mv) => write!(f, "{}", mv),
+            Move::Castle(castle_mv) => write!(f, "{}", castle_mv),
+            Move::Promotion(promote_mv) => write!(f, "{}", promote_mv),
+        }
+    }
+}
 
-            Move::Castle(castle_mv) => {
-                write!(f, "{}", castle_mv)
-            }
-
-            Move::Promotion(promotion_mv) => {
-                write!(f, "{}", promotion_mv)
-            }
+impl Move {
+    pub fn to_algebra(self) -> String {
+        match self {
+            Move::King(mv)
+            | Move::Rook(mv)
+            | Move::Pawn(mv)
+            | Move::DoublePawnPush(mv)
+            | Move::Piece(mv)
+            | Move::EnPassant(mv) => mv.to_algebra(),
+            Move::Castle(castle_mv) => castle_mv.to_string(),
+            Move::Promotion(promote_mv) => promote_mv.to_algebra(),
         }
     }
 }
@@ -70,6 +76,19 @@ impl EncodedMove {
 
     pub fn is_capture(&self) -> bool {
         self.0 >> 15 == 1
+    }
+
+    fn to_algebra(&self) -> String {
+        let piece_type = self.piece_type();
+        let capture = self.is_capture();
+        let (_, to) = self.decode_into_squares();
+        let mut algebra = piece_type.to_algebra();
+
+        if capture {
+            algebra += "x";
+        }
+
+        format!("{algebra}{to}")
     }
 }
 impl Decode for EncodedMove {
@@ -120,6 +139,21 @@ impl PromotionMove {
     pub fn is_capture(&self) -> bool {
         self.0 >> 15 == 1
     }
+
+    fn to_algebra(&self) -> String {
+        let capture = self.is_capture();
+        let (from, to) = self.decode_into_squares();
+        let promote = self.promote_piece_type().to_algebra();
+        let mut algebra = String::new();
+
+        if capture {
+            let from_file = from.to_string().chars().next().unwrap();
+            algebra.push(from_file);
+            algebra.push('x');
+        }
+
+        format!("{}{}={}", algebra, to, promote)
+    }
 }
 
 impl Decode for PromotionMove {
@@ -139,6 +173,67 @@ impl fmt::Display for PromotionMove {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let (from, to) = self.decode_into_squares();
         let promote_pc = self.promote_piece_type();
-        write!(f, "{}{}={}", from, to, promote_pc)
+        write!(f, "{}{}{}", from, to, promote_pc)
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_to_algebra() {
+        let tests: Vec<(Move, &str)> = vec![
+            (
+                Move::Piece(EncodedMove::new(
+                    square::A1,
+                    square::A8,
+                    PieceType::Rook,
+                    false,
+                )),
+                "Ra8",
+            ),
+            (
+                Move::Piece(EncodedMove::new(
+                    square::E2,
+                    square::E4,
+                    PieceType::Bishop,
+                    true,
+                )),
+                "Bxe4",
+            ),
+            (
+                Move::Promotion(PromotionMove::new(
+                    square::E7,
+                    square::F8,
+                    &PromoteType::Queen,
+                    true,
+                )),
+                "exf8=Q",
+            ),
+            (
+                Move::Promotion(PromotionMove::new(
+                    square::E7,
+                    square::E8,
+                    &PromoteType::Queen,
+                    false,
+                )),
+                "e8=Q",
+            ),
+            (Move::Castle(Castle::Queenside), "0-0-0"),
+            (
+                Move::Pawn(EncodedMove::new(
+                    square::E2,
+                    square::E4,
+                    PieceType::Pawn,
+                    false,
+                )),
+                "e4",
+            ),
+        ];
+
+        for (mv, expected) in tests {
+            assert_eq!(mv.to_algebra(), expected)
+        }
     }
 }

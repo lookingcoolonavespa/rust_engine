@@ -92,6 +92,14 @@ impl PieceType {
         PIECE_CHARS[self.to_usize()]
     }
 
+    pub fn to_algebra(self) -> String {
+        return if self == PieceType::Pawn {
+            "".to_string()
+        } else {
+            PIECE_CHARS[self.to_usize()].to_string().to_uppercase()
+        };
+    }
+
     pub fn score(self) -> u32 {
         PIECE_TYPE_SCORE_MAP[self.to_usize()]
     }
